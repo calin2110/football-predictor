@@ -1248,7 +1248,7 @@
       const name = team.name;
       const src = team.crest;
       if (!src) return `<span class="club-badge" style="background:${teamColor(name)}">${escapeHtml(initials(name))}</span>`;
-      const relativeSrc = src.startsWith('http') || src.startsWith('/') ? `crests/${src}` : `/crests/${src}`;
+      const relativeSrc = `crests/${src}`;
       return `<img class="club-crest" src="${encodeURI(relativeSrc)}" alt="${escapeHtml(name)}" title="${escapeHtml(name)}"
         loading="lazy" data-team="${escapeHtml(name)}">`;
     }

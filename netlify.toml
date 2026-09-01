@@ -1,0 +1,4 @@
+[build]
+  # data.json is served from the GitHub raw CDN, so Netlify only needs to
+  # rebuild when index.html itself changes. All other commits are skipped.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- index.html"
