@@ -909,6 +909,60 @@
     .btn-google:hover { box-shadow: 0 2px 10px rgba(0,0,0,.35); }
     .btn-google:disabled { opacity: .55; cursor: wait; }
     .login-error { color: var(--red); font-size: .8rem; min-height: 1.1em; }
+
+    .ko-pred-gate { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 14px; background: rgba(245,158,11,.07); border-top: 1px solid rgba(245,158,11,.18); cursor: pointer; transition: background .15s; }
+    .ko-pred-gate:hover { background: rgba(245,158,11,.13); }
+    .ko-pred-gate-icon { font-size: .9rem; flex-shrink: 0; }
+    .ko-pred-gate-text { font-size: .74rem; font-weight: 600; color: #f59e0b; }
+    .bk-admin-score-input { width: 56px; padding: 1px 3px; text-align: center; background: var(--card2); border: 1px solid var(--border2); border-radius: 4px; color: var(--text); font-size: .65rem; font-weight: 700; }
+    .bk-admin-score-input:focus { outline: none; border-color: var(--accent); }
+    .bk-pred-open { font-size: .48rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+    .bk-pred-locked { font-size: .48rem; font-weight: 700; letter-spacing: .05em; background: rgba(34,197,94,.15); color: var(--green); border: 1px solid rgba(34,197,94,.3); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+    .ko-pred-hint { font-size: .76rem; color: var(--text2); text-align: center; padding: 14px 0 8px; font-style: italic; line-height: 1.5; }
+    .ko-pred-inputs { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px 0 16px; }
+    .ko-pred-team { font-size: .68rem; color: var(--text2); text-align: center; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .ko-score-input { width: 52px; padding: 8px 4px; text-align: center; background: var(--card2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); font-size: 1.3rem; font-weight: 700; -moz-appearance: textfield; }
+    .ko-score-input::-webkit-inner-spin-button, .ko-score-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .ko-score-input:focus { outline: none; border-color: var(--accent); }
+    .ko-pred-dash { font-size: 1.2rem; color: var(--text3); font-weight: 300; }
+    .ko-lock-btn { width: 100%; padding: 10px; background: var(--accent); color: #000; border: none; border-radius: 8px; font-weight: 700; font-size: .88rem; cursor: pointer; transition: opacity .12s; margin-top: 2px; }
+    .ko-lock-btn:hover:not(:disabled) { opacity: .85; }
+    .ko-lock-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .ko-my-pred { background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.25); border-radius: 8px; padding: 10px 14px; margin: 10px 0 6px; font-size: .82rem; color: var(--green); }
+    .ko-missed { font-size: .76rem; color: var(--text3); text-align: center; padding: 10px 0 4px; font-style: italic; }
+    .ko-no-teams { font-size: .78rem; color: var(--text3); text-align: center; padding: 20px 0; }
+
+
+    .winner-pred-card {
+      border-color: rgba(255,200,50,.25);
+      background: linear-gradient(135deg, var(--card) 0%, rgba(255,200,50,.04) 100%);
+      margin-bottom: 16px;
+    }
+    .winner-card-title { font-size:1rem; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .winner-actual { font-size:.95rem; color:var(--green); margin:4px 0; }
+    .winner-change-btn {
+      background:var(--card2); border:1px solid var(--border); border-radius:8px;
+      padding:5px 10px; color:var(--text); font-size:.88rem; cursor:pointer; margin-top:4px;
+    }
+    .winner-change-btn:hover { opacity:.8; }
+    .winner-team-grid {
+      display:grid; grid-template-columns:repeat(4, 1fr);
+      gap:6px; max-height:400px; overflow-y:auto; padding:2px;
+    }
+    .winner-team-btn {
+      display:flex; align-items:center; gap:4px; padding:5px 7px;
+      background:var(--card2); border:1px solid var(--border); border-radius:6px;
+      color:var(--text); font-size:.6rem; cursor:pointer; text-align:left;
+    }
+    .winner-team-btn:hover { opacity:.8; }
+    .winner-team-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(99,102,241,.12); }
+    .winner-summary-wrap {
+      margin:12px 0 16px; padding:14px 16px;
+      background:var(--card); border:1px solid var(--border); border-radius:12px;
+    }
+    .winner-summary-title { font-size:.9rem; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .winner-summary-sub { font-weight:400; color:var(--text2); margin-left:4px; }
+
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -979,6 +1033,7 @@
 
     <!-- ── MATCHES TAB ─────────────────────────────── -->
     <div id="tab-matches" class="tab-panel">
+      <div id="winner-banner"></div>
       <div class="stage-nav">
         <div class="stage-toggle" id="stage-toggle">
           <button class="stage-btn" data-view="qualifying" onclick="setStage(Stage.QUALIFYING)">Qualifying rounds</button>
@@ -1181,6 +1236,9 @@
     let ADMIN = false;
     let ACTIVE_TAB = 'matches';
     let STAGE = Stage.LEAGUE;
+
+    // change when we move to knockouts
+    let CURRENT_STAGE = Stage.LEAGUE;
     let FILTER = 'all';          // matchday number or round name
     let PATH_FILTER = 'all';     // 'all' | 'Champions Path' | 'League Path'
     let LB_DATE = null;
@@ -1388,7 +1446,7 @@
       PREDS[stage][match.id] = PREDS[stage][match.id] || {};
       PREDS[stage][match.id][playerId] = { home_goals: homeGoals, away_goals: awayGoals };
       try {
-        await dbRef(`predictions/${stage}/${match.id}/${playerId}`)
+        await dbRef(`predictions/${stage}/matches/${match.id}/${playerId}`)
           .set({ home_goals: homeGoals, away_goals: awayGoals });
         return true;
       } catch (e) {
@@ -1456,6 +1514,7 @@
       document.querySelectorAll('.stage-btn').forEach(b => b.classList.toggle('active', b.dataset.view === stage));
       renderPathBar();
       renderNav();
+      renderWinnerBanner();
       renderMatches();
     }
     function setFilter(val) {
@@ -1467,7 +1526,102 @@
       PATH_FILTER = p;
       renderPathBar();
       renderNav();
+      renderWinnerBanner();
       renderMatches();
+    }
+
+    async function getWinnerPrediction(playerId, stage) {
+      try {
+        const snap = await dbRef(`predictions/${stage}/winner/${playerId}`).once('value');
+        return snap.val() || null;
+      } catch (e) {
+        console.error('getWinnerPrediction', e.code, e.message);
+        return null;
+      }
+    }
+
+    async function getWinnerPredictions(stage) {
+       const snap = await dbRef(`predictions/${stage}/winner`).once('value');
+       return snap.val() || null;
+    }
+
+    async function saveWinnerPred(stage, playerId, teamId) {
+      try {
+        await dbRef(`predictions/${stage}/winner/${playerId}`).set(teamId);
+      } catch (e) {
+        console.error('saveWinnerPred', e.code, e.message);
+        return;
+      }
+      document.getElementById('match-modal').classList.add('hidden');
+      renderWinnerBanner();
+    }
+
+    async function showWinnerModal(stage) {
+      if (!CURRENT_USER) return;
+      const getTeams = matches => [...new Set(
+        matches.flatMap(m => [m.home_id, m.away_id])
+      )].map(id => TEAMS[id]);
+      let teams;
+      if (stage === Stage.LEAGUE) {
+        teams = getTeams(LEAGUE_MATCHES);
+      } else {
+        teams = getTeams(KNOCKOUT_MATCHES);
+      }
+      const myPred = await getWinnerPrediction(CURRENT_USER?.uid, STAGE);
+
+      document.getElementById('modal-content').innerHTML = `
+        <div class="m-id">Tournament Prediction</div>
+        <div class="m-vs">🏆 Who wins the Champions League?</div>
+        ${myPred ? `<div class="ko-my-pred" style="margin:8px 0">Your pick: ${clubBadge(myPred)}<strong>${escapeHtml(TEAMS[myPred].name)}</strong></div>` : ''}
+        <div class="winner-team-grid" id="winner-team-grid">
+          ${teams.map(t => `<button class="winner-team-btn${myPred === t ? ' active' : ''}" onclick="saveWinnerPred('${js(STAGE)}','${js(CURRENT_USER?.uid)}', '${js(t.id)}')">${clubBadge(t.id)}<span>${escapeHtml(t.name)}</span></button>`).join('')}
+        </div>`;
+      document.getElementById('match-modal').classList.remove('hidden');
+    }
+
+    async function renderWinnerBanner() {
+     const el = document.getElementById('winner-banner');
+     if (STAGE === Stage.QUALIFYING) {
+       // NOTHING; set innerhtml to empty
+       el.innerHTML = '';
+       return;
+     }
+     if (STAGE === Stage.KNOCKOUT) {
+       el.innerHTML = 'Picking a champion here opens after the group stage is finished';
+       return;
+     }
+     const myPrediction = await getWinnerPrediction(CURRENT_USER?.uid, STAGE);
+     if (!myPrediction) {
+       el.innerHTML =  `<div class="ko-pred-gate" onclick="showWinnerModal(Stage.LEAGUE)">
+            <span class="ko-pred-gate-icon">🏆</span>
+            <span class="ko-pred-gate-text">Pick your champion to see everyone's predictions</span>
+       </div>`
+       return;
+     }
+     const preds = await getWinnerPredictions(STAGE);
+     const cols = bestCols(PLAYERS.length);
+     const colsSm = bestCols(PLAYERS.length, 4);
+
+     const cells = PLAYERS.map(p => {
+        const pick = preds?.[p.uid] || null;
+        const team = pick ? TEAMS[pick] : null;
+        const mine = p.uid === CURRENT_USER?.uid ? ' pred-col-mine' : '';
+        const body = team
+          ? `${clubBadge(team.id)}<span class="pred-col-score" style="font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${escapeHtml(team.name)}</span>`
+          : `<span class="pred-col-score" style="color:var(--text3)">—</span>`;
+      return `<div class="pred-col${team ? '' : ' st-none'}${mine}" title="${escapeHtml(p.name)}: ${team ? escapeHtml(team.name) : 'no pick'}">
+        <span class="pred-col-name">${escapeHtml(p.name)}</span>
+        ${body}</div>`;
+    }).join('');
+
+    el.innerHTML = `<div class="match-card winner-card">
+      <div class="card-top">
+        <span class="tag-row"><span class="group-tag tag-ko">Champion</span></span>
+      </div>
+      <div class="pred-grid" style="--pred-cols:${cols};--pred-cols-sm:${colsSm}">${cells}</div>
+    </div>`;
+       // render all predictions
+
     }
 
     function renderPathBar() {
@@ -1865,11 +2019,13 @@
       }, 80);
     }
 
+    // TODO: why do we need this?
     function setScoreInput(id, val) {
       const clean = /^\d{1,2}\s*[-–—]\s*\d{1,2}$/.test(val) ? val.replace(/\s*[-–—]\s*/, '-') : null;
       saveResult(id, clean);
       buildTies();
       updateProgress();
+      renderWinnerBanner();
       renderMatches();
       if (ACTIVE_TAB === 'standings') renderStandings();
       if (ACTIVE_TAB === 'bracket') renderBracket();
@@ -2694,12 +2850,14 @@
       ADMIN = !ADMIN;
       document.getElementById('admin-bar').classList.toggle('on', ADMIN);
       document.getElementById('admin-toggle').classList.toggle('on', ADMIN);
+      renderWinnerBanner();
       renderMatches();
     }
     function leaveAdmin() {
       ADMIN = false;
       document.getElementById('admin-bar').classList.remove('on');
       document.getElementById('admin-toggle').classList.remove('on');
+      renderWinnerBanner();
       renderMatches();
     }
     function exportResults() {
@@ -2765,7 +2923,8 @@
       if (APP_STARTED) {
         // second CSV picked by hand — just fold it in
         buildTies();
-         updateProgress(); renderPathBar(); renderNav(); renderMatches();
+
+         updateProgress(); renderPathBar(); renderNav(); renderWinnerBanner(); renderMatches();
         return;
       }
       APP_STARTED = true;
@@ -2783,13 +2942,24 @@
 
       // Open on the stage that is actually happening
       const today = new Date().toISOString().slice(0, 10);
-      const upcoming = DATA.matches.filter(m => !getMatchScore(m) && m.date).sort((a, b) => a.date.localeCompare(b.date))[0];
-      const todays = DATA.matches.find(m => m.date === today);
-      const focus = todays || upcoming || DATA.matches[DATA.matches.length - 1];
+      let matches;
+      if (CURRENT_STAGE === Stage.LEAGUE) {
+        matches = LEAGUE_MATCHES;
+      } else {
+        matches = KNOCKOUT_MATCHES;
+      }
+      const dateOf = m => splitDateTime(m.datetime).date;
+      const upcoming = matches
+              .filter(m => !getMatchScore(m) && m.datetime)
+              .sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0)[0]
+
+      const todays = matches.find(m => dateOf(m) === today);
+      const focus = todays || upcoming || matches[matches.length - 1];
       STAGE = focus ? focus.stage : Stage.LEAGUE;
       document.querySelectorAll('.stage-btn').forEach(b => b.classList.toggle('active', b.dataset.view === STAGE));
       FILTER = focus ? (focus.stage === Stage.LEAGUE ? String(focus.matchday) : focus.round) : 'all';
 
+      renderWinnerBanner();
       renderPathBar();
       renderNav();
       renderMatches();
