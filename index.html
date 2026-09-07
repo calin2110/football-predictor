@@ -1050,12 +1050,6 @@
 
     <!-- ── STANDINGS TAB ───────────────────────────── -->
     <div id="tab-standings" class="tab-panel hidden">
-      <div class="grp-player-nav" id="grp-player-nav"></div>
-      <div class="grp-mode-bar hidden" id="grp-mode-bar">
-        <span class="path-label">View</span>
-        <button class="grp-mode-btn active" data-mode="pure" onclick="setStandingsMode('pure')">Pure predictions</button>
-        <button class="grp-mode-btn" data-mode="mixed" onclick="setStandingsMode('mixed')">With actual results</button>
-      </div>
       <div id="main-standings"></div>
     </div>
 
@@ -1553,7 +1547,7 @@
         return;
       }
       document.getElementById('match-modal').classList.add('hidden');
-      renderWinnerBanner();
+      await renderWinnerBanner();
     }
 
     async function showWinnerModal(stage) {
@@ -1900,13 +1894,6 @@
         html += `<div class="m-no-score">Not played yet</div>`;
       }
 
-      // // TODO: remove this
-      // if (state === 'locked' && myPred) {
-      //   html += `<div class="my-pred">Your prediction: <strong>${escapeHtml(myPred)}</strong>
-      //     <span style="opacity:.7"> · change it any time before kick-off</span>
-      //     <div style="margin-top:8px"><button class="btn btn-ghost" onclick="reopenPrediction('${js(match.id)}')">Change prediction</button></div></div>`;
-      // } else
-
       if (state === MatchStatus.CLOSED && !myPred) {
         html += `<div class="pred-missed">You didn't get a prediction in for this one</div>`;
       }
@@ -1956,25 +1943,6 @@
       document.getElementById('match-modal').classList.remove('hidden');
       setTimeout(() => document.getElementById('pred-h')?.focus(), 30);
     }
-
-    // function reopenPrediction(id) {
-    //   const match = matchById(id);
-    //   if (!match || !isOpen(match)) return;
-    //   const myPred = getPrediction(match, CURRENT_USER?.playerName) || '';
-    //   const [h, a] = myPred.split('-');
-    //   document.getElementById('modal-content').innerHTML = `
-    //     <div class="m-id">Change prediction</div>
-    //     <div class="m-vs">${escapeHtml(match.home)} <span style="color:var(--text3);font-weight:400">vs</span> ${escapeHtml(match.away)}</div>
-    //     <div class="m-date">${escapeHtml(match.date ? fmtLong(match.date) : '')}</div>
-    //     <div class="pred-inputs">
-    //       <div class="pred-team">${escapeHtml(match.home)}</div>
-    //       <input class="score-num-input" id="pred-h" type="number" min="0" max="20" value="${escapeHtml(h || '')}">
-    //       <span class="pred-dash">—</span>
-    //       <input class="score-num-input" id="pred-a" type="number" min="0" max="20" value="${escapeHtml(a || '')}">
-    //       <div class="pred-team">${escapeHtml(match.away)}</div>
-    //     </div>
-    //     <button class="lock-btn" id="lock-btn" onclick="submitPrediction(${escapeHtml(JSON.stringify(match))})">Save prediction</button>`;
-    // }
 
     async function submitPrediction(match) {
       const hEl = document.getElementById('pred-h'), aEl = document.getElementById('pred-a');
@@ -2034,114 +2002,126 @@
     // ══════════════════════════════════════════════════
     //  LEAGUE PHASE TABLE
     // ══════════════════════════════════════════════════
-    // scoreFor(match) returns '2-1' or null — lets us reuse this for predicted tables
-    function computeTable(scoreFor) {
-      const teams = {};
-      const touch = name => (teams[name] = teams[name] || { name, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, agf: 0, aw: 0, form: [] });
-      const league = stageMatches('league').slice()
-        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+    function computeTable() {
+      const tableResult = {};
+      LEAGUE_MATCHES.filter(m => m.matchday = 1)
+              .forEach(m => {
+                  tableResult[m.home_id] = { id: m.home_id, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsScored: 0, goalsAgainst: 0, awayGoalsScored: 0, goalDifference: 0, awayWins: 0, form: [], opponents: [] };
+                  tableResult[m.away_id] = { id: m.away_id, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsScored: 0, goalsAgainst: 0, awayGoalsScored: 0, goalDifference: 0, awayWins: 0, form: [], opponents: [] };
+              });
+      const playedMatches = LEAGUE_MATCHES
+        .filter(m => m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '')
+        .sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0);
 
-      league.forEach(m => {
-        const hs = touch(m.home), as = touch(m.away);
-        const sc = scoreFor(m);
-        if (!sc) return;
-        const [hg, ag] = sc.split('-').map(Number);
-        if (isNaN(hg) || isNaN(ag)) return;
-        hs.p++; as.p++;
-        hs.gf += hg; hs.ga += ag;
-        as.gf += ag; as.ga += hg; as.agf += ag;
-        if (hg > ag) { hs.w++; as.l++; hs.form.push('W'); as.form.push('L'); }
-        else if (ag > hg) { as.w++; as.aw++; hs.l++; hs.form.push('L'); as.form.push('W'); }
-        else { hs.d++; as.d++; hs.form.push('D'); as.form.push('D'); }
+      playedMatches.forEach(m => {
+        const homeObj = tableResult[m.home_id];
+        const awayObj = tableResult[m.away_id];
+        const homeGoals = m.home_goals;
+        const awayGoals = m.away_goals;
+        homeObj.played++;
+        homeObj.opponents.push(m.away_id);
+        awayObj.played++;
+        awayObj.opponents.push(m.home_id);
+        homeObj.goalsScored += homeGoals;
+        homeObj.goalsAgainst += awayGoals;
+        homeObj.goalDifference += (homeGoals - awayGoals);
+        awayObj.goalsScored += awayGoals;
+        awayObj.goalsAgainst += homeGoals;
+        awayObj.awayGoalsScored += awayGoals;
+        awayObj.goalDifference += (awayGoals - homeGoals);
+        if (homeGoals > awayGoals) {
+          homeObj.wins++;
+          homeObj.form.push('W');
+          homeObj.points += 3;
+          awayObj.losses++;
+          awayObj.form.push('L');
+        } else if (awayGoals > homeGoals) {
+          awayObj.wins++;
+          awayObj.awayWins++;
+          awayObj.form.push('W');
+          awayObj.points += 3;
+          homeObj.losses++;
+          homeObj.form.push('L');
+        } else {
+          homeObj.draws++;
+          homeObj.form.push('D');
+          homeObj.points += 1;
+          awayObj.points += 1;
+          awayObj.draws++;
+          awayObj.form.push('D');
+        }
       });
 
-      return Object.values(teams).map(t => ({ ...t, pts: t.w * 3 + t.d, gd: t.gf - t.ga }))
+      return Object.values(tableResult).map(t => ({
+          ...t,
+          opponentPoints: t.opponents.reduce((sum, id) => sum + tableResult[id].points, 0),
+          opponentGoalDifference: t.opponents.reduce((sum, id) => sum + tableResult[id].goalDifference, 0),
+          opponentGoals: t.opponents.reduce((sum, id) => sum + tableResult[id].goalsScored, 0)
+      }))
         .sort((a, b) =>
-          b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || b.agf - a.agf ||
-          b.w - a.w || b.aw - a.aw || a.name.localeCompare(b.name));
+          b.points - a.points || b.goalDifference - a.goalDifference || b.goalsScored - a.goalsScored || b.awayGoalsScored - a.awayGoalsScored ||
+          b.wins - a.wins || b.awayWins - a.awayWins || b.opponentPoints - a.opponentPoints || b.opponentGoalDifference - a.opponentGoalDifference || b.opponentGoals - a.opponentGoals || TEAMS[a.id].name.localeCompare(TEAMS[b.id].name));
     }
 
-    function predictedScoreFor(playerId, mode) {
-      return match => {
-        if (mode === 'mixed') {
-          const actual = getMatchScore(match);
-          if (actual) return actual;
-        }
-        return getPrediction(match, playerId);
-      };
-    }
 
-    function renderStandingsPlayerNav() {
-      const el = document.getElementById('grp-player-nav');
-      el.innerHTML =
-        `<button class="grp-player-btn ${!STANDINGS_PLAYER ? 'active' : ''}" onclick="setStandingsPlayer(null)">Actual table</button>` +
-        DATA.players.map(p =>
-          `<button class="grp-player-btn ${STANDINGS_PLAYER === p ? 'active' : ''}" onclick="setStandingsPlayer('${js(p)}')">${escapeHtml(p)}</button>`
-        ).join('');
-    }
-    function setStandingsPlayer(p) {
-      STANDINGS_PLAYER = p;
-      document.getElementById('grp-mode-bar').classList.toggle('hidden', !p);
-      renderStandings();
-    }
-    function setStandingsMode(mode) {
-      STANDINGS_MODE = mode;
-      document.querySelectorAll('.grp-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-      renderStandings();
-    }
 
     function renderStandings() {
-      renderStandingsPlayerNav();
       const el = document.getElementById('main-standings');
-      const scoreFor = STANDINGS_PLAYER ? predictedScoreFor(STANDINGS_PLAYER.uid, STANDINGS_MODE) : resultOf;
-      const table = computeTable(scoreFor);
-      if (!table.length) {
-        el.innerHTML = `<div class="state-msg">No league phase fixtures loaded yet.</div>`;
-        return;
-      }
-      const totalGames = stageMatches('league').length;
-      const done = stageMatches('league').filter(m => scoreFor(m)).length;
+      const table = computeTable();
+      const totalGames = LEAGUE_MATCHES.length;
+      const done = LEAGUE_MATCHES.filter(m =>  m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '').length;
       const gdFmt = n => n > 0 ? `+${n}` : String(n);
       const gdCls = n => n > 0 ? 'lt-gd-pos' : n < 0 ? 'lt-gd-neg' : '';
       const n = table.length;
       const r16Cut = Math.min(8, n), poCut = Math.min(24, n);
 
-      const banner = STANDINGS_PLAYER
-        ? `<div class="grp-view-banner">
-             <span>Showing <span class="grp-view-banner-name">${escapeHtml(STANDINGS_PLAYER)}</span>'s predicted table</span>
-             <span class="grp-view-banner-mode">— ${STANDINGS_MODE === 'pure' ? 'predictions only' : 'results where known, predictions elsewhere'}</span>
-           </div>`
-        : '';
 
       const rows = table.map((t, i) => {
         const pos = i + 1;
         const zone = pos <= r16Cut ? 'zone-r16' : pos <= poCut ? 'zone-po' : 'zone-out';
         const line = pos === r16Cut ? ' zone-line' : pos === poCut ? ' zone-line2' : '';
+        const gd = t.goalDifference;
+        const pts = t.points;
         const form = t.form.slice(-5).map(f => `<span class="lf-${f.toLowerCase()}">${f}</span>`).join('');
         return `<tr class="${zone}${line}">
           <td class="lt-pos">${pos}</td>
-          <td class="lt-team"><span class="lt-team-cell">${clubBadge(t.name)}<span style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(t.name)}</span></span></td>
-          <td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td>
-          <td>${t.gf}</td><td>${t.ga}</td>
-          <td class="${gdCls(t.gd)}">${gdFmt(t.gd)}</td>
-          <td class="lt-pts">${t.pts}</td>
+          <td class="lt-team"><span class="lt-team-cell">${clubBadge(t.id)}<span style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(TEAMS[t.id].name)}</span></span></td>
+
+          <td class="lt-pts">${pts}</td>
+          <td class="${gdCls(gd)}">${gdFmt(gd)}</td>
+          <td>${t.goalsScored}</td><td>${t.goalsAgainst}</td>
+          <td>${t.wins}</td><td>${t.draws}</td><td>${t.losses}</td>
+          <td>${t.awayWins}</td>
+          <td class="lt-pts">${t.opponentPoints}</td>
+          <td class="${gdCls(t.opponentGoalDifference)}">${gdFmt(t.opponentGoalDifference)}</td>
+          <td>${t.opponentGoals}</td>
           <td class="col-form"><div class="lt-form">${form}</div></td>
         </tr>`;
       }).join('');
 
-      el.innerHTML = `${banner}
+      el.innerHTML = `
         <div class="lt-card">
           <div class="lt-head">
             <span class="lt-title">League phase table</span>
-            <span class="lt-progress">${done}/${totalGames} matches ${STANDINGS_PLAYER ? 'predicted' : 'played'}</span>
+            <span class="lt-progress">${done}/${totalGames} matches played</span>
           </div>
           <div class="lt-wrap">
             <table class="lt-tbl">
               <thead><tr>
                 <th>#</th><th class="lt-team">Team</th>
-                <th title="Played">P</th><th title="Won">W</th><th title="Drawn">D</th><th title="Lost">L</th>
-                <th title="Goals for">GF</th><th title="Goals against">GA</th><th title="Goal difference">GD</th>
-                <th class="lt-pts">Pts</th><th class="col-form">Form</th>
+                <th class="lt-pts">Pts</th>
+                <th title="Goal difference">GD</th>
+                <th title="Goals for">GS</th>
+                <th title="Goals against">GA</th>
+                <th title="Won">W</th>
+                <th title="Drawn">D</th>
+                <th title="Lost">L</th>
+                <th title="Away wins">AW</th>
+                <th class="lt-pts">Opp Pts</th>
+                <th title="Opponent GD">Opp GD</th>
+                <th title="Opponent Goals">Opp GS</th>
+
+                <th class="col-form">Form</th>
               </tr></thead>
               <tbody>${rows}</tbody>
             </table>
