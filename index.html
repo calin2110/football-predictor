@@ -1959,6 +1959,7 @@
         if (btn) { btn.disabled = false; btn.textContent = 'Lock in prediction'; }
         alert('Saved on this device only — the database rejected the write. Check your Realtime Database rules.');
       }
+      PREDS[CURRENT_STAGE]['matches'][match.id][CURRENT_USER?.uid] = { home_goals: h, away_goals: a };
       renderMatches();
       openMatchModal(match);
     }
