@@ -1388,7 +1388,7 @@
     function getPrediction(match, playerId) {
       if (match.stage === Stage.QUALIFYING)
         return null;
-      return PREDS[match.stage][match.id]?.[playerId] || null;
+      return PREDS[match.stage]['matches'][match.id]?.[playerId] || null;
     }
     function ptsOf(match, playerId) {
       return calculatePredictionScore(getPrediction(match, playerId), match);
@@ -2004,7 +2004,7 @@
     // ══════════════════════════════════════════════════
     function computeTable() {
       const tableResult = {};
-      LEAGUE_MATCHES.filter(m => m.matchday = 1)
+      LEAGUE_MATCHES.filter(m => m.matchday === 1)
               .forEach(m => {
                   tableResult[m.home_id] = { id: m.home_id, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsScored: 0, goalsAgainst: 0, awayGoalsScored: 0, goalDifference: 0, awayWins: 0, form: [], opponents: [] };
                   tableResult[m.away_id] = { id: m.away_id, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsScored: 0, goalsAgainst: 0, awayGoalsScored: 0, goalDifference: 0, awayWins: 0, form: [], opponents: [] };
