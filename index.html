@@ -1390,7 +1390,7 @@
         return null;
       return PREDS[match.stage]['matches'][match.id]?.[playerId] || null;
     }
-    function ptsOf(match, playerId) {
+    function getPointsOfPlayerPrediction(match, playerId) {
       return calculatePredictionScore(getPrediction(match, playerId), match);
     }
     function ptsCls(pts) {
@@ -2200,28 +2200,31 @@
     //  LEADERBOARD
     // ══════════════════════════════════════════════════
     function scoredMatches() {
-      return DATA.matches.filter(m => getMatchScore(m) && (!LB_DATE || (m.date && m.date <= LB_DATE)));
+      const leagueScoredMatches = LEAGUE_MATCHES.filter(m => m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '');
+      const knockoutScoredMatches = KNOCKOUT_MATCHES.filter(m => m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '');
+      return [...leagueScoredMatches, ...knockoutScoredMatches];
     }
-    function calcLB() {
-      return DATA.players.map(player => {
-        let pts = 0, exact = 0, ocount = 0, wrong = 0, played = 0;
+    function computeLeaderboardPoints() {
+      return PLAYERS.map(player => {
+        let points = 0, exactCount = 0, outcomeCount = 0, wrongCount = 0, playedCount = 0;
         scoredMatches().forEach(m => {
-          const p = ptsOf(m, player.uid);
-          if (p === null) return;
-          played++; pts += p;
-          if (p >= Points.EXACT) exact++;
-          else if (p >= Points.PARTIAL) ocount++;
-          else wrong++;
+          const predPts = getPointsOfPlayerPrediction(m, player.uid);
+          if (predPts === null) return;
+          playedCount++;
+          points += predPts;
+          if (predPts === Points.EXACT) exactCount++;
+          else if (predPts === Points.PARTIAL) outcomeCount++;
+          else wrongCount++;
         });
-        return { player, pts, exact, ocount, wrong, played, ppg: played ? (pts / played).toFixed(1) : '—' };
-      }).sort((a, b) => b.pts - a.pts || b.exact - a.exact || b.ocount - a.ocount || a.player.localeCompare(b.player));
+        return { player, points, exactCount, outcomeCount, wrongCount, playedCount, ppg: playedCount ? (points / playedCount).toFixed(1) : '—' };
+      }).sort((a, b) => b.points - a.points || b.exactCount - a.exactCount || b.outcomeCount - a.outcomeCount || a.player.name.localeCompare(b.player.name));
     }
     function getForm(playerId) {
       return scoredMatches()
               // TODO: fix sorting
         .filter(m => getPrediction(m, playerId))
         .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
-        .slice(-5).map(m => ptsOf(m, playerId));
+        .slice(-5).map(m => getPointsOfPlayerPrediction(m, playerId));
     }
     function renderFormDots(form) {
       if (!form.length) return '<span class="form-empty">—</span>';
@@ -2232,58 +2235,63 @@
     }
 
     function renderStatCards() {
-      const total = DATA.matches.length;
+      const KNOCKOUT_MATCHES_CNT = 45;
+      const total = LEAGUE_MATCHES.length + KNOCKOUT_MATCHES_CNT;
       const scored = scoredMatches().length;
-      const lb = calcLB();
-      const leader = lb[0];
-      const topExact = [...lb].sort((a, b) => b.exact - a.exact)[0];
+      const leaderboardPoints = computeLeaderboardPoints();
+      const leader = leaderboardPoints[0];
+      const topExact = [...leaderboardPoints].sort((a, b) => b.exactCount - a.exactCount)[0];
       document.getElementById('stats-row').innerHTML = `
         <div class="stat-card">
           <div class="stat-val">${scored}<span style="font-size:.9rem;font-weight:600;color:var(--text3)">/${total}</span></div>
           <div class="stat-lbl">Matches with results</div>
         </div>
         <div class="stat-card">
-          <div class="stat-val">${leader ? leader.pts : 0}</div>
+          <div class="stat-val">${leader ? leader.points : 0}</div>
           <div class="stat-lbl">Points leader</div>
         </div>
         <div class="stat-card">
-          <div class="stat-val green">${topExact ? topExact.exact : 0}</div>
+          <div class="stat-val green">${topExact ? topExact.exactCount : 0}</div>
           <div class="stat-lbl">Most exact scores</div>
         </div>
         <div class="stat-card">
-          <div class="stat-val" style="font-size:1rem;font-weight:800;color:var(--text)">${leader ? escapeHtml(leader.player) : '—'}</div>
+          <div class="stat-val" style="font-size:1rem;font-weight:800;color:var(--text)">${leader ? escapeHtml(leader.player.playerName) : '—'}</div>
           <div class="stat-lbl">Top of the table</div>
         </div>`;
     }
 
     function renderLeagueTable() {
-      const lb = calcLB();
+      const leaderboardPoints = computeLeaderboardPoints();
       const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
       const ranks = [];
-      lb.forEach((e, i) => {
+      leaderboardPoints.forEach((e, i) => {
         if (i === 0) return ranks.push(1);
-        const prev = lb[i - 1];
-        ranks.push(e.pts === prev.pts && e.exact === prev.exact ? ranks[i - 1] : i + 1);
+        const prev = leaderboardPoints[i - 1];
+        ranks.push(e.points === prev.points && e.exactCount === prev.exactCount ? ranks[i - 1] : i + 1);
       });
-      document.getElementById('lb-tbody').innerHTML = lb.map((e, i) => {
+      document.getElementById('lb-tbody').innerHTML = leaderboardPoints.map((e, i) => {
         const rank = ranks[i];
         const isMe = e.player === CURRENT_USER?.playerName;
         const rankCell = medals[rank] ? `<span class="rank-medal">${medals[rank]}</span>` : `<span class="rank-num">${rank}</span>`;
         return `<tr class="${rank <= 3 ? 'pos-' + rank : ''}${isMe ? ' is-me' : ''}">
           <td class="col-rank">${rankCell}</td>
-          <td class="col-player"><span class="player-link" onclick="openProfile('${js(e.player)}')">${escapeHtml(e.player)}</span>${isMe ? '<span class="lb-you">you</span>' : ''}</td>
-          <td class="val-pts">${e.pts}</td>
-          <td class="col-gp">${e.played}</td>
-          <td class="val-exact">${e.exact}</td>
-          <td class="val-outcome">${e.ocount}</td>
-          <td class="col-wrong val-wrong">${e.wrong}</td>
+          <td class="col-player"><span class="player-link" onclick="openProfile('${js(e.player.uid)}')">${escapeHtml(e.player.name)}</span>${isMe ? '<span class="lb-you">you</span>' : ''}</td>
+          <td class="val-pts">${e.points}</td>
+          <td class="col-gp">${e.playedCount}</td>
+          <td class="val-exact">${e.exactCount}</td>
+          <td class="val-outcome">${e.outcomeCount}</td>
+          <td class="col-wrong val-wrong">${e.wrongCount}</td>
           <td class="col-ppg val-ppg">${e.ppg}</td>
           <td class="col-form">${renderFormDots(getForm(e.player.uid))}</td>
         </tr>`;
       }).join('');
     }
 
-    function _lbDates() { return [...new Set(DATA.matches.map(m => m.date).filter(Boolean))].sort(); }
+    function getLeaderboardDates() {
+      const leagueDates = new Set(LEAGUE_MATCHES.map(m => splitDateTime(m).date));
+      const knockoutDates = new Set(KNOCKOUT_MATCHES.map(m => splitDateTime(m).date));
+      return new Set([...leagueDates, ...knockoutDates]);
+    }
     function _liveIdx(dates) {
       const scored = DATA.matches.filter(m => getMatchScore(m) && m.date).map(m => m.date).sort();
       const last = scored[scored.length - 1];
@@ -2300,27 +2308,27 @@
       slider.value = Math.max(0, Math.min(idx >= 0 ? idx : maxIdx, maxIdx));
       slider.style.setProperty('--fill', `${maxIdx === 0 ? 100 : (slider.value / maxIdx) * 100}%`);
     }
-    function renderLbTimeline() {
-      const dates = _lbDates();
+    function renderLeaderboardTimeline() {
+      const dates = getLeaderboardDates();
       if (!dates.length) return;
       document.getElementById('lb-tl-start-lbl').textContent = fmtShort(dates[0]);
       document.getElementById('lb-tl-end-lbl').textContent = fmtShort(dates[dates.length - 1]);
       _syncSlider(dates);
-      updateLbLabel();
+      updateLeaderboardLabel();
     }
     function onLbSlider(val) {
-      const dates = _lbDates();
+      const dates = getLeaderboardDates();
       const idx = parseInt(val, 10);
       LB_DATE = idx >= _liveIdx(dates) ? null : (dates[idx] || null);
       const maxIdx = dates.length - 1;
       document.getElementById('lb-tl-slider').style.setProperty('--fill', `${maxIdx === 0 ? 100 : (idx / maxIdx) * 100}%`);
-      updateLbLabel(); renderStatCards(); renderLeagueTable();
+      updateLeaderboardLabel(); renderStatCards(); renderLeagueTable();
     }
     function setLbDate(date) {
-      LB_DATE = date; _syncSlider(_lbDates());
-      updateLbLabel(); renderStatCards(); renderLeagueTable();
+      LB_DATE = date; _syncSlider(getLeaderboardDates);
+      updateLeaderboardLabel(); renderStatCards(); renderLeagueTable();
     }
-    function updateLbLabel() {
+    function updateLeaderboardLabel() {
       const label = document.getElementById('lb-tl-label');
       label.textContent = LB_DATE
         ? 'After ' + new Date(LB_DATE + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' })
@@ -2328,7 +2336,7 @@
       document.getElementById('lb-tl-live-btn').classList.toggle('live-active', !LB_DATE);
     }
     function renderLeaderboard() {
-      renderLbTimeline(); renderStatCards(); renderLeagueTable();
+      renderLeaderboardTimeline(); renderStatCards(); renderLeagueTable();
     }
 
     // ══════════════════════════════════════════════════
@@ -2346,7 +2354,7 @@
       players.forEach(p => {
         let cur = 0, longest = 0, cold = 0;
         played.forEach(m => {
-          const pts = ptsOf(m, p.uid);
+          const pts = getPointsOfPlayerPrediction(m, p.uid);
           if (pts === null) return;
           if (pts >= 1) { cur++; cold = 0; if (cur > longest) longest = cur; }
           else { cold++; cur = 0; }
@@ -2365,7 +2373,7 @@
         Object.values(groups).forEach(list => {
           const withPred = list.filter(m => getPrediction(m, p.uid));
           if (withPred.length < 2) return;
-          if (withPred.length === list.length && list.every(m => ptsOf(m, p.uid) >= 1)) perfect++;
+          if (withPred.length === list.length && list.every(m => getPointsOfPlayerPrediction(m, p.uid) >= 1)) perfect++;
         });
         st[p].perfectRounds = perfect;
       });
@@ -2373,13 +2381,13 @@
       let biggestRound = null;
       Object.entries(groups).forEach(([key, list]) => {
         let total = 0;
-        list.forEach(m => players.forEach(p => { const pts = ptsOf(m, p.uid); if (pts !== null) total += pts; }));
+        list.forEach(m => players.forEach(p => { const pts = getPointsOfPlayerPrediction(m, p.uid); if (pts !== null) total += pts; }));
         if (!biggestRound || total > biggestRound.total) biggestRound = { key, total, count: list.length };
       });
 
       const teamkills = played.filter(m => {
         const active = players.filter(p => getPrediction(m, p.uid));
-        return active.length > 0 && active.every(p => ptsOf(m, p.uid) === 0);
+        return active.length > 0 && active.every(p => getPointsOfPlayerPrediction(m, p.uid) === 0);
       });
 
       played.forEach(m => {
@@ -2389,11 +2397,11 @@
         players.forEach(p => { const o = predOutcome(m, p); if (o) { counts[o]++; total++; } });
         const majorOut = ['H', 'D', 'A'].reduce((a, b) => counts[a] >= counts[b] ? a : b);
         const isUpset = total > 0 && majorOut !== actualOut;
-        const correct = players.filter(p => (ptsOf(m, p.uid) ?? -1) >= 1);
+        const correct = players.filter(p => (getPointsOfPlayerPrediction(m, p.uid) ?? -1) >= 1);
         players.forEach(p => {
           const pred = getPrediction(m, p.uid);
           if (!pred) return;
-          const pts = ptsOf(m, p.uid);
+          const pts = getPointsOfPlayerPrediction(m, p.uid);
           if (pts === null) return;
           if (pts >= 3) st[p].exact++;
           if (pts >= 1) st[p].outcomes++;
@@ -2507,12 +2515,12 @@
         .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
       const mine = played.filter(m => getPrediction(m, playerId));
       switch (statKey) {
-        case 'exact': return mine.filter(m => ptsOf(m, playerId) >= 3);
-        case 'outcomes': return mine.filter(m => ptsOf(m, playerId) >= 1);
+        case 'exact': return mine.filter(m => getPointsOfPlayerPrediction(m, playerId) >= 3);
+        case 'outcomes': return mine.filter(m => getPointsOfPlayerPrediction(m, playerId) >= 1);
         case 'streak': {
           let cur = [], longest = [];
           mine.forEach(m => {
-            if (ptsOf(m, playerId) >= 1) { cur.push(m); if (cur.length > longest.length) longest = [...cur]; }
+            if (getPointsOfPlayerPrediction(m, playerId) >= 1) { cur.push(m); if (cur.length > longest.length) longest = [...cur]; }
             else cur = [];
           });
           return longest;
@@ -2521,24 +2529,24 @@
           const want = statKey === 'currentStreak' ? p => p >= 1 : p => p === 0;
           const out = [];
           for (let i = mine.length - 1; i >= 0; i--) {
-            if (want(ptsOf(mine[i], playerId))) out.unshift(mine[i]); else break;
+            if (want(getPointsOfPlayerPrediction(mine[i], playerId))) out.unshift(mine[i]); else break;
           }
           return out;
         }
         case 'upsets': return mine.filter(m => {
-          if (ptsOf(m, playerId) < 1) return false;
+          if (getPointsOfPlayerPrediction(m, playerId) < 1) return false;
           const counts = { H: 0, D: 0, A: 0 }; let total = 0;
           DATA.players.forEach(p => { const o = predOutcome(m, p.uid); if (o) { counts[o]++; total++; } });
           const major = ['H', 'D', 'A'].reduce((a, b) => counts[a] >= counts[b] ? a : b);
           return total > 0 && major !== outcome(getMatchScore(m));
         });
         case 'loneWolf': return mine.filter(m => {
-          if (ptsOf(m, playerId) < 1) return false;
-          return DATA.players.filter(p => (ptsOf(m, p.uid) ?? -1) >= 1).length === 1;
+          if (getPointsOfPlayerPrediction(m, playerId) < 1) return false;
+          return DATA.players.filter(p => (getPointsOfPlayerPrediction(m, p.uid) ?? -1) >= 1).length === 1;
         });
         case 'closeCall': return mine.filter(m => {
           const pred = getPrediction(m, playerId);
-          if (ptsOf(m, playerId) !== 0 || !pred.includes('-')) return false;
+          if (getPointsOfPlayerPrediction(m, playerId) !== 0 || !pred.includes('-')) return false;
           const [ph, pa] = pred.split('-').map(Number);
           const [ah, aa] = getMatchScore(m).split('-').map(Number);
           return Math.abs(ph - ah) + Math.abs(pa - aa) === 1;
@@ -2552,7 +2560,7 @@
           const out = [];
           Object.values(groups).forEach(list => {
             const withPred = list.filter(m => getPrediction(m, playerId));
-            if (withPred.length >= 2 && withPred.length === list.length && list.every(m => ptsOf(m, playerId) >= 1)) out.push(...list);
+            if (withPred.length >= 2 && withPred.length === list.length && list.every(m => getPointsOfPlayerPrediction(m, playerId) >= 1)) out.push(...list);
           });
           return out;
         }
@@ -2600,7 +2608,7 @@
           let badge;
           const pred = player ? getPrediction(m, player.uid) : null;
           if (pred) {
-            const pts = ptsOf(m, player.uid);
+            const pts = getPointsOfPlayerPrediction(m, player.uid);
             const cls = pts >= 3 ? 'exact' : pts >= 1 ? 'outcome' : 'wrong';
             const lbl = pts >= 3 ? `⚡ ${pred} · +3` : pts >= 1 ? `✓ ${pred} · +1` : `✗ ${pred} · 0`;
             badge = `<span class="stat-match-pred-badge ${cls}">${escapeHtml(lbl)}</span>`;
@@ -2623,6 +2631,7 @@
     }
     function closeStatModal() { document.getElementById('stat-modal').classList.remove('on'); }
 
+    // TODO: in the works
     // ══════════════════════════════════════════════════
     //  PROFILE PANEL
     // ══════════════════════════════════════════════════
@@ -2639,7 +2648,7 @@
     }
 
     function buildProfileNeighbors(player) {
-      const lb = calcLB();
+      const lb = computeLeaderboardPoints();
       const idx = lb.findIndex(x => x.player === player);
       if (idx === -1) return '';
       const mine = lb[idx], above = idx > 0 ? lb[idx - 1] : null, below = idx < lb.length - 1 ? lb[idx + 1] : null;
@@ -2681,12 +2690,12 @@
         .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
       let exact = 0, correct = 0, cur = 0, best = 0;
       played.forEach(m => {
-        const pts = ptsOf(m, player.uid);
+        const pts = getPointsOfPlayerPrediction(m, player.uid);
         if (pts === null) return;
         if (pts >= 3) exact++;
         if (pts >= 1) { correct++; cur++; if (cur > best) best = cur; } else cur = 0;
       });
-      const lb = calcLB();
+      const lb = computeLeaderboardPoints();
       const entry = lb.find(x => x.player === player);
       const rank = lb.findIndex(x => x.player === player) + 1;
       const statsHtml = `<div class="pp-stats">
@@ -2700,7 +2709,7 @@
       // Lucky team
       const teamPts = {};
       played.forEach(m => {
-        const pts = ptsOf(m, player.uid);
+        const pts = getPointsOfPlayerPrediction(m, player.uid);
         if (!pts) return;
         teamPts[m.home] = (teamPts[m.home] || 0) + pts;
         teamPts[m.away] = (teamPts[m.away] || 0) + pts;
