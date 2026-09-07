@@ -1038,7 +1038,7 @@
         <div class="stage-toggle" id="stage-toggle">
           <button class="stage-btn" data-view="qualifying" onclick="setStage(Stage.QUALIFYING)">Qualifying rounds</button>
           <button class="stage-btn active" data-view="league" onclick="setStage(Stage.LEAGUE)">League phase</button>
-          <button class="stage-btn" data-view="knockout" onclick="setStage(Stage.KNOCKOUT)">Knockout</button>
+<!--          <button class="stage-btn" data-view="knockout" onclick="setStage(Stage.KNOCKOUT)">Knockout</button>-->
         </div>
       </div>
       <div class="path-bar hidden" id="path-bar"></div>
@@ -1340,8 +1340,8 @@
       TIES = Object.values(byKey).map(tie => {
         tie.legs.sort((a, b) => a.datetime - b.datetime);
         const first = tie.legs[0];
-        tie.teamA = TEAMS[first.home_id].name;
-        tie.teamB = TEAMS[first.away_id].name;
+        tie.teamA = first.home_id;
+        tie.teamB = first.away_id;
         let aGoals = 0, bGoals = 0, complete = true;
         tie.legs.forEach(leg => {
           const h = leg.home_goals;
@@ -1581,7 +1581,7 @@
        return;
      }
      if (STAGE === Stage.KNOCKOUT) {
-       el.innerHTML = 'Picking a champion here opens after the group stage is finished';
+       el.innerHTML = '';
        return;
      }
      const myPrediction = await getWinnerPrediction(CURRENT_USER?.uid, STAGE);
@@ -1909,7 +1909,7 @@
               <span class="m-leg-teams">${escapeHtml(TEAMS[leg.home_id].name)} v ${escapeHtml(TEAMS[leg.away_id].name)}</span>
               <span class="m-leg-score">${score ? escapeHtml(score) : '–'}</span></div>`;
           }).join('')}
-          ${tie.complete ? `<div class="agg-note">Aggregate: ${escapeHtml(tie.teamA)} ${tie.aggA}–${tie.aggB} ${escapeHtml(tie.teamB)}${tie.winner ? ` · ${escapeHtml(tie.winner)} advance` : ''}</div>` : ''}
+          ${tie.complete ? `<div class="agg-note">Aggregate: ${escapeHtml(TEAMS[tie.teamA].name)} ${tie.aggA}–${tie.aggB} ${escapeHtml(TEAMS[tie.teamB].name)}${TEAMS[tie.winner]?.name ? ` · ${escapeHtml(TEAMS[tie.winner]?.name)} advance` : ''}</div>` : ''}
           </div>`;
         }
       }
@@ -2169,7 +2169,7 @@
           <div class="bk-rounds">
             ${rounds.map(r => {
               const roundTies = ties.filter(t => t.round === r)
-                .sort((a, b) => a.teamA.localeCompare(b.teamA));
+                .sort((a, b) => TEAMS[a.teamA].name.localeCompare(TEAMS[b.teamA].name));
               return `<div class="bk-round">
                 <div class="bk-round-head">${escapeHtml(r)} · ${roundTies.length} ${roundTies.length === 1 ? 'tie' : 'ties'}</div>
                 ${roundTies.map(tieCard).join('')}
@@ -2185,14 +2185,14 @@
       const aggA = tie.complete ? tie.aggA : '';
       const aggB = tie.complete ? tie.aggB : '';
       const legs = tie.legs.map(l => {
-      const sc = getMatchScore(l);
+        const sc = l === tie.legs[0] ? getMatchScore(l) : getMatchScore({home_goals: l.away_goals, away_goals: l.home_goals});
         return `<span>${escapeHtml((l.leg || '').replace(' leg', '').replace('First', '1st').replace('Second', '2nd') || 'Leg')}: ${sc ? escapeHtml(sc) : '–'}</span>`;
       }).join('');
       const firstLeg = tie.legs[0];
       return `<div class="tie-card" onclick="openMatchModal(${escapeHtml(JSON.stringify(firstLeg))})">
-        <div class="tie-team${rowCls(tie.teamA)}">${clubBadge(tie.teamA)}<span class="tie-name">${escapeHtml(tie.teamA)}</span><span class="tie-agg">${aggA}</span></div>
+        <div class="tie-team${rowCls(tie.teamA)}">${clubBadge(tie.teamA)}<span class="tie-name">${escapeHtml(TEAMS[tie.teamA].name)}</span><span class="tie-agg">${aggA}</span></div>
         <div class="tie-divider"></div>
-        <div class="tie-team${rowCls(tie.teamB)}">${clubBadge(tie.teamB)}<span class="tie-name">${escapeHtml(tie.teamB)}</span><span class="tie-agg">${aggB}</span></div>
+        <div class="tie-team${rowCls(tie.teamB)}">${clubBadge(tie.teamB)}<span class="tie-name">${escapeHtml(TEAMS[tie.teamB].name)}</span><span class="tie-agg">${aggB}</span></div>
         <div class="tie-legs">${legs || '<span class="tie-pending">Not played</span>'}</div>
       </div>`;
     }
@@ -2873,7 +2873,7 @@
       if (matches)
         Object.entries(matches).forEach(([id, m]) => {
           if (!m) return;
-          m.id = id;
+          m.id = parseInt(id, 10);
           m.stage = stage_name;
         });
       return { matches, scorers: pair?.scorers };
