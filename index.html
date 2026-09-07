@@ -2757,9 +2757,8 @@
     }
     async function loadChatMessages() {
       try {
-        const res = await fetch(dbUrl('chat'), { cache: 'no-store' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const messages = normalizeChat(await res.json());
+        const snap = await dbRef('chat').once('value');
+        const messages = normalizeChat(snap.val());
         const sig = JSON.stringify(messages.map(m => [m.id, m.text, m.createdAt]));
         if (sig !== CHAT_SIG) { CHAT_SIG = sig; renderChatMessages(messages); }
         setChatStatus(`${messages.length} message${messages.length === 1 ? '' : 's'}`);
@@ -2789,11 +2788,7 @@
       sendEl.disabled = true;
       setChatStatus('Sending…');
       try {
-        const res = await fetch(dbUrl('chat'), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, text, createdAt: Date.now() })
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        await dbRef('chat').push({ name, text, createdAt: Date.now() });
         textEl.value = '';
         await loadChatMessages();
       } catch {
