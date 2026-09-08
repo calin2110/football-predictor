@@ -1437,8 +1437,6 @@
 
     async function savePrediction(match, playerId, homeGoals, awayGoals) {
       const stage = match.stage;
-      PREDS[stage][match.id] = PREDS[stage][match.id] || {};
-      PREDS[stage][match.id][playerId] = { home_goals: homeGoals, away_goals: awayGoals };
       try {
         await dbRef(`predictions/${stage}/matches/${match.id}/${playerId}`)
           .set({ home_goals: homeGoals, away_goals: awayGoals });
