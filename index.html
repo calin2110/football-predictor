@@ -1846,7 +1846,7 @@
     //  MATCH MODAL (view + predict)
     // ══════════════════════════════════════════════════
     function getMatchScore(match) {
-      if (match.home_goals == null || match.home_goals === '' || match.away_goals == null || match.away_goals === '')
+      if (match.home_goals == null || match.away_goals == null)
         return '';
       return `${match.home_goals}-${match.away_goals}`;
     }
@@ -2011,7 +2011,7 @@
                   tableResult[m.away_id] = { id: m.away_id, points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsScored: 0, goalsAgainst: 0, awayGoalsScored: 0, goalDifference: 0, awayWins: 0, form: [], opponents: [] };
               });
       const playedMatches = LEAGUE_MATCHES
-        .filter(m => m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '')
+        .filter(m => m.home_goals != null && m.away_goals != null)
         .sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0);
 
       playedMatches.forEach(m => {
@@ -2070,7 +2070,7 @@
       const el = document.getElementById('main-standings');
       const table = computeTable();
       const totalGames = LEAGUE_MATCHES.length;
-      const done = LEAGUE_MATCHES.filter(m =>  m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '').length;
+      const done = LEAGUE_MATCHES.filter(m =>  m.home_goals != null && m.away_goals != null).length;
       const gdFmt = n => n > 0 ? `+${n}` : String(n);
       const gdCls = n => n > 0 ? 'lt-gd-pos' : n < 0 ? 'lt-gd-neg' : '';
       const n = table.length;
@@ -2201,8 +2201,8 @@
     //  LEADERBOARD
     // ══════════════════════════════════════════════════
     function scoredMatches() {
-      const leagueScoredMatches = LEAGUE_MATCHES.filter(m => m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '');
-      const knockoutScoredMatches = KNOCKOUT_MATCHES.filter(m => m.home_goals != null && m.home_goals !== '' && m.away_goals != null && m.away_goals !== '');
+      const leagueScoredMatches = LEAGUE_MATCHES.filter(m => m.home_goals != null && m.away_goals != null);
+      const knockoutScoredMatches = KNOCKOUT_MATCHES.filter(m => m.home_goals != null && m.away_goals != null);
       return [...leagueScoredMatches, ...knockoutScoredMatches];
     }
     function computeLeaderboardPoints() {
@@ -2856,7 +2856,7 @@
       const teams = snap.val() || [];
       Object.entries(teams).forEach(([id, t]) => {
         if (!t) return;
-        t.id = id;
+        t.id = parseInt(id, 10);
         TEAMS[id] = t;
       });
     }
@@ -2870,10 +2870,15 @@
       const snap = await dbRef(`${stage_url}`).once('value');
       const pair = snap.val();
       const matches = pair?.matches;
+
       if (matches)
         Object.entries(matches).forEach(([id, m]) => {
           if (!m) return;
           m.id = parseInt(id, 10);
+          m.attendance = m.attendance === '' ? null : parseInt(m.attendance, 10);
+          m.home_goals = m.home_goals === '' ? null : parseInt(m.home_goals, 10);
+          m.away_goals = m.away_goals === '' ? null : parseInt(m.away_goals, 10);
+          m.referee = m.referee === '' ? null : m.referee;
           m.stage = stage_name;
         });
       return { matches, scorers: pair?.scorers };
