@@ -1675,17 +1675,31 @@
       nav.innerHTML = buttons;
     }
 
-    function bestCols(n, maxCols) {
-      if (!n) return 1;
-      if (!maxCols) maxCols = Math.min(n, 7);
-      const cands = [];
-      for (let c = 1; c <= Math.max(1, maxCols); c++) {
-        const rows = Math.ceil(n / c);
-        cands.push({ c, empty: rows * c - n, rows });
-      }
-      cands.sort((a, b) => (a.empty - b.empty) || (a.empty === 0 ? a.rows - b.rows : Math.abs(a.c - 5) - Math.abs(b.c - 5)));
-      return cands[0]?.c || 5;
+  function bestCols(n, maxCols, targetRatio = 4 / 3) {
+    if (!n || n <= 0) return 1;
+    if (n <= 3) return n;
+
+    const maxAllowed = Math.min(n, maxCols || 7);
+    const minAllowed = 2;
+
+    const cands = [];
+    for (let c = minAllowed; c <= maxAllowed; c++) {
+      const rows = Math.ceil(n / c);
+      const empty = rows * c - n;
+      const ratio = c / rows;
+      const ratioDiff = Math.abs(ratio - targetRatio);
+      cands.push({ c, rows, empty, ratioDiff });
     }
+
+    cands.sort((a, b) => {
+      // 1. Primary: minimize empty trailing slots
+      if (a.empty !== b.empty) return a.empty - b.empty;
+      // 2. Tiebreaker: closest to target aspect ratio (cols / rows)
+      return a.ratioDiff - b.ratioDiff;
+    });
+
+    return cands[0]?.c || 4;
+  }
 
     function buildPredCols(match) {
       return PLAYERS.map(player => {
@@ -2445,12 +2459,11 @@
 
     // TODO
     function getTop5ByEntropy() {
-      return DATA.matches.map(m => {
+      return scoredMatches().map(m => {
         const preds = PLAYERS.map(p => getPrediction(m, p.uid)).filter(Boolean);
         let wins = 0, draws = 0, losses = 0;
         preds.forEach(pred => {
-          const [h, a] = pred.split('-').map(Number);
-          if (h > a) wins++; else if (h === a) draws++; else losses++;
+          if (pred.home_goals > pred.away_goals) wins++; else if (pred.home_goals === pred.away_goals) draws++; else losses++;
         });
         const total = preds.length;
         if (total < 2) return null;
@@ -2560,6 +2573,7 @@
           return out;
         }
         case 'upsets': return mine.filter(m => {
+          // TODO: this breaks
           if (getPointsOfPlayerPrediction(m, playerId) < 1) return false;
           const counts = { H: 0, D: 0, A: 0 }; let total = 0;
           DATA.players.forEach(p => { const o = predOutcome(m, p.uid); if (o) { counts[o]++; total++; } });
@@ -2602,6 +2616,7 @@
     function openTeamkillModal() {
       openStatModal({ icon: '💀', label: 'Nobody got it', title: 'Every prediction was wrong', matches: computeStats().teamkills, player: null });
     }
+    // TODO: this breaks
     function openEntropyModal() {
       const top5 = getTop5ByEntropy();
       document.getElementById('stat-modal-icon').textContent = '⚖️';
@@ -2611,11 +2626,15 @@
         const { bar, labels } = splitBar(g.counts);
         const sc = getMatchScore(g.m);
         return `<div class="stat-match-item" onclick="goToMatch('${js(g.m.id)}')">
-          <span class="stat-match-home">${escapeHtml(g.m.home)}</span>
+          <div class="stat-match-team side-home">
+            ${clubBadge(g.m.home_id)}<span class="stat-match-name">${escapeHtml(TEAMS[g.m.home_id].name)}</span>
+          </div>
           <div class="stat-match-score-col"><span class="stat-match-score">${sc ? escapeHtml(sc) : 'vs'}</span></div>
-          <span class="stat-match-away">${escapeHtml(g.m.away)}</span>
+          <div class="stat-match-team side-away">
+            ${clubBadge(g.m.away_id)}<span class="stat-match-name">${escapeHtml(TEAMS[g.m.away_id].name)}</span>
+          </div>
           <div class="stat-match-meta">
-            <span class="stat-match-date">#${i + 1} · ${g.m.date ? fmtShort(g.m.date) : ''}</span>
+            <span class="stat-match-date">#${i + 1} · ${splitDateTime(g.m.datetime).date ? fmtShort(splitDateTime(g.m.datetime).date) : ''}</span>
             <span class="stat-match-nav">Open match →</span>
           </div>
           <div style="grid-column:1/-1">${bar}${labels}</div>
