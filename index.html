@@ -2204,7 +2204,7 @@
       return [...leagueScoredMatches, ...knockoutScoredMatches];
     }
     function computeLeaderboardPoints() {
-      return PLAYERS.map(player => {
+      const leaderboard = PLAYERS.map(player => {
         let points = 0, exactCount = 0, outcomeCount = 0, wrongCount = 0, playedCount = 0;
         scoredMatches().forEach(m => {
           const predPts = getPointsOfPlayerPrediction(m, player.uid);
@@ -2217,12 +2217,21 @@
         });
         return { player, points, exactCount, outcomeCount, wrongCount, playedCount, ppg: playedCount ? (points / playedCount).toFixed(1) : '—' };
       }).sort((a, b) => b.points - a.points || b.exactCount - a.exactCount || b.outcomeCount - a.outcomeCount || a.player.name.localeCompare(b.player.name));
+      leaderboard.forEach((e, i) => {
+        if (i === 0) {
+          e.rank = 1;
+          return;
+        }
+        const prev = leaderboard[i - 1];
+        const isTied = e.points === prev.points && e.exactCount === prev.exactCount;
+        e.rank = isTied ? prev.rank : i + 1;
+      });
+      return leaderboard;
     }
     function getForm(playerId) {
       return scoredMatches()
-              // TODO: fix sorting
         .filter(m => getPrediction(m, playerId))
-        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
+        .sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0)
         .slice(-5).map(m => getPointsOfPlayerPrediction(m, playerId));
     }
     function renderFormDots(form) {
@@ -2262,14 +2271,8 @@
     function renderLeagueTable() {
       const leaderboardPoints = computeLeaderboardPoints();
       const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
-      const ranks = [];
-      leaderboardPoints.forEach((e, i) => {
-        if (i === 0) return ranks.push(1);
-        const prev = leaderboardPoints[i - 1];
-        ranks.push(e.points === prev.points && e.exactCount === prev.exactCount ? ranks[i - 1] : i + 1);
-      });
       document.getElementById('lb-tbody').innerHTML = leaderboardPoints.map((e, i) => {
-        const rank = ranks[i];
+        const rank = e.rank;
         const isMe = e.player === CURRENT_USER?.playerName;
         const rankCell = medals[rank] ? `<span class="rank-medal">${medals[rank]}</span>` : `<span class="rank-num">${rank}</span>`;
         return `<tr class="${rank <= 3 ? 'pos-' + rank : ''}${isMe ? ' is-me' : ''}">
@@ -2648,21 +2651,31 @@
 
     function buildProfileNeighbors(player) {
       const lb = computeLeaderboardPoints();
-      const idx = lb.findIndex(x => x.player === player);
-      if (idx === -1) return '';
-      const mine = lb[idx], above = idx > 0 ? lb[idx - 1] : null, below = idx < lb.length - 1 ? lb[idx + 1] : null;
-      const row = (e, rank, isMe, diff, dir) => `
+      const currentPlayer = lb.find(x => x.player === player);
+      if (!currentPlayer) return '';
+      const aboveRank = lb.reduce((best, x) => (x.rank < currentPlayer.rank && x.rank > best ? x.rank : best), 0);
+      const belowRank = lb.reduce((best, x) => (x.rank > currentPlayer.rank && (best === null || x.rank < best) ? x.rank : best), null);
+
+      const above = aboveRank ? lb.filter(x => x.rank === aboveRank) : [];
+      const tied = lb.filter(x => x.rank === currentPlayer.rank);
+      const below = belowRank !== null ? lb.filter(x => x.rank === belowRank) : [];
+
+      const row = (e, isMe, diff, dir) => `
         <div class="pp-nbr-row${isMe ? ' pp-nbr-me' : ''}">
-          <span class="pp-nbr-rank">#${rank}</span>
+          <span class="pp-nbr-rank">#${e.rank}</span>
           <span class="pp-nbr-name">${escapeHtml(e.player.name)}${e.player.uid === CURRENT_USER?.uid ? ' <span class="pp-nbr-you">(you)</span>' : ''}</span>
           <span class="pp-nbr-pts">${e.points}</span>
           ${diff !== null ? `<span class="pp-nbr-diff ${dir}">${dir === 'behind' ? '+' : '-'}${diff} pts</span>` : ''}
         </div>`;
-      return `<div class="pp-neighbors">
+     return `<div class="pp-neighbors">
         <div class="pp-section-label">Leaderboard</div>
-        ${above ? row(above, idx, false, above.points - mine.points, 'behind') : '<div class="pp-nbr-leader">🏆 Top of the table</div>'}
-        ${row(mine, idx + 1, true, null, null)}
-        ${below ? row(below, idx + 2, false, mine.points - below.points, 'ahead') : '<div class="pp-nbr-last">Bottom of the pile 💀</div>'}
+        ${above.length > 0
+          ? above.map(e => row(e, false, e.points - currentPlayer.points, 'behind')).join('')
+          : '<div class="pp-nbr-leader">🏆 Top of the table</div>'}
+        ${tied.map(e => row(e, e.player === player, null, null)).join('')}
+        ${below.length > 0
+          ? below.map(e => row(e, false, currentPlayer.points - e.points, 'ahead')).join('')
+          : '<div class="pp-nbr-last">Bottom of the pile 💀</div>'}
       </div>`;
     }
 
