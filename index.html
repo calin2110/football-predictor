@@ -613,6 +613,11 @@
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
       padding: 10px 14px; cursor: pointer; transition: border-color .15s, background .15s, transform .1s;
     }
+    .stat-match-team {
+      display: flex; align-items: center; gap: 7px;
+      min-width: 0; align-self: center;
+    }
+    .stat-match-team.stat-match-away { flex-direction: row-reverse; }
     .stat-match-item:hover { border-color: var(--accent); background: var(--accent-dim); transform: translateY(-1px); }
     .stat-match-home { font-size: .85rem; font-weight: 600; color: var(--text); align-self: center; }
     .stat-match-away { font-size: .85rem; font-weight: 600; color: var(--text); text-align: right; align-self: center; }
@@ -1848,7 +1853,7 @@
         return '';
       return `${match.home_goals}-${match.away_goals}`;
     }
-    function matchById(id) { return DATA.matches.find(m => m.id === id); }
+    // function matchById(id) { return DATA.matches.find(m => m.id === id); }
 
     function openMatchModal(match) {
       let score = getMatchScore(match);
@@ -2298,7 +2303,7 @@
     }
 
     function _liveIdx(dates) {
-      const scored = DATA.matches.filter(m => getMatchScore(m) && m.date).map(m => m.date).sort();
+      const scored = scoredMatches().map(m => splitDateTime(m.datetime).date).sort();
       const last = scored[scored.length - 1];
       if (!last) return dates.length - 1;
       const idx = dates.lastIndexOf(last);
@@ -2348,15 +2353,14 @@
     //  STATS
     // ══════════════════════════════════════════════════
     function computeStats() {
-      const players = DATA.players;
-      const played = DATA.matches.filter(m => getMatchScore(m))
-        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
-      const st = {};
-      players.forEach(p => {
-        st[p] = { exact: 0, outcomes: 0, streak: 0, currentStreak: 0, coldStreak: 0, upsets: 0, loneWolf: 0, perfectRounds: 0, closeCall: 0 };
+      const played = scoredMatches().sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0);
+      const playerStats = {};
+      const generalStats = {};
+      PLAYERS.forEach(p => {
+        playerStats[p.uid] = { exact: 0, outcomes: 0, streak: 0, currentStreak: 0, coldStreak: 0, upsets: 0, loneWolf: 0, perfectRounds: 0, closeCall: 0 };
       });
 
-      players.forEach(p => {
+      PLAYERS.forEach(p => {
         let cur = 0, longest = 0, cold = 0;
         played.forEach(m => {
           const pts = getPointsOfPlayerPrediction(m, p.uid);
@@ -2364,7 +2368,9 @@
           if (pts >= 1) { cur++; cold = 0; if (cur > longest) longest = cur; }
           else { cold++; cur = 0; }
         });
-        st[p].streak = longest; st[p].currentStreak = cur; st[p].coldStreak = cold;
+        playerStats[p.uid].streak = longest;
+        playerStats[p.uid].currentStreak = cur;
+        playerStats[p.uid].coldStreak = cold;
       });
 
       // matchday / round groups
@@ -2373,56 +2379,71 @@
         const key = m.stage === 'league' ? `MD${m.matchday}` : `${m.round}${m.path ? ' · ' + m.path : ''}`;
         (groups[key] = groups[key] || []).push(m);
       });
-      players.forEach(p => {
+      PLAYERS.forEach(p => {
         let perfect = 0;
         Object.values(groups).forEach(list => {
           const withPred = list.filter(m => getPrediction(m, p.uid));
           if (withPred.length < 2) return;
           if (withPred.length === list.length && list.every(m => getPointsOfPlayerPrediction(m, p.uid) >= 1)) perfect++;
         });
-        st[p].perfectRounds = perfect;
+        playerStats[p.uid].perfectRounds = perfect;
       });
 
-      let biggestRound = null;
+      generalStats.biggestRound = null;
       Object.entries(groups).forEach(([key, list]) => {
         let total = 0;
-        list.forEach(m => players.forEach(p => { const pts = getPointsOfPlayerPrediction(m, p.uid); if (pts !== null) total += pts; }));
-        if (!biggestRound || total > biggestRound.total) biggestRound = { key, total, count: list.length };
+        list.forEach(m => PLAYERS.forEach(p => { const pts = getPointsOfPlayerPrediction(m, p.uid); if (pts !== null) total += pts; }));
+        if (!generalStats.biggestRound || total > generalStats.biggestRound.total) generalStats.biggestRound = { key, total, count: list.length };
       });
 
-      const teamkills = played.filter(m => {
-        const active = players.filter(p => getPrediction(m, p.uid));
+      generalStats.teamkills = played.filter(m => {
+        const active = PLAYERS.filter(p => getPrediction(m, p.uid));
         return active.length > 0 && active.every(p => getPointsOfPlayerPrediction(m, p.uid) === 0);
       });
 
       played.forEach(m => {
-        const actual = getMatchScore(m);
-        const actualOut = outcome(actual);
         const counts = { H: 0, D: 0, A: 0 }; let total = 0;
-        players.forEach(p => { const o = predOutcome(m, p); if (o) { counts[o]++; total++; } });
-        const majorOut = ['H', 'D', 'A'].reduce((a, b) => counts[a] >= counts[b] ? a : b);
-        const isUpset = total > 0 && majorOut !== actualOut;
-        const correct = players.filter(p => (getPointsOfPlayerPrediction(m, p.uid) ?? -1) >= 1);
-        players.forEach(p => {
+        const getOutcome = m => {
+          if (m.home_goals == null || m.away_goals == null)
+            return null;
+          if (m.home_goals > m.away_goals)
+            return 'H';
+          if (m.home_goals < m.away_goals)
+            return 'A';
+          return 'D';
+        }
+        const realOutcome = getOutcome(m);
+        PLAYERS.forEach(p => {
+          const playerPrediction = getPrediction(m, p.uid);
+          const playerOutcome = getOutcome(playerPrediction);
+          if (playerOutcome) {
+            counts[playerOutcome]++;
+            total++;
+          }
+        });
+        const majorityOutcome = ['H', 'D', 'A'].reduce((a, b) => counts[a] >= counts[b] ? a : b);
+        const isUpset = total > 0 && majorityOutcome !== realOutcome;
+        const correct = PLAYERS.filter(p => (getPointsOfPlayerPrediction(m, p.uid) ?? -1) >= 1);
+        PLAYERS.forEach(p => {
           const pred = getPrediction(m, p.uid);
           if (!pred) return;
           const pts = getPointsOfPlayerPrediction(m, p.uid);
           if (pts === null) return;
-          if (pts >= 3) st[p].exact++;
-          if (pts >= 1) st[p].outcomes++;
-          if (isUpset && predOutcome(m, p) === actualOut) st[p].upsets++;
-          if (correct.length === 1 && correct[0] === p) st[p].loneWolf++;
-          if (pts === 0 && pred.includes('-')) {
-            const [ph, pa] = pred.split('-').map(Number);
-            const [ah, aa] = actual.split('-').map(Number);
-            if (Math.abs(ph - ah) + Math.abs(pa - aa) === 1) st[p].closeCall++;
+          if (pts >= 3) playerStats[p.uid].exact++;
+          if (pts >= 1) playerStats[p.uid].outcomes++;
+          if (isUpset && pts >= 1) playerStats[p.uid].upsets++;
+          if (correct.length === 1 && correct[0] === p) playerStats[p.uid].loneWolf++;
+          if (pts === 0) {
+            if (Math.abs(pred.home_goals - m.home_goals) + Math.abs(pred.away_goals - m.away_goals) === 1) playerStats[p.uid].closeCall++;
           }
         });
       });
 
-      return { st, biggestRound, teamkills, playedCount: played.length };
+      generalStats.playedCount = played.length;
+      return {'playerStats': playerStats, 'generalStats': generalStats}
     }
 
+    // TODO
     function getTop5ByEntropy() {
       return DATA.matches.map(m => {
         const preds = PLAYERS.map(p => getPrediction(m, p.uid)).filter(Boolean);
@@ -2453,16 +2474,17 @@
 
     function renderStats() {
       const el = document.getElementById('main-stats');
-      const { st, biggestRound, teamkills, playedCount } = computeStats();
-      if (!playedCount) {
+      const st = computeStats();
+      const generalStats = st['generalStats'];
+      const playerStats = st['playerStats'];
+      if (!generalStats.playedCount) {
         el.innerHTML = '<div class="insights-empty">No results yet — stats fill in as matches are played.</div>';
         return;
       }
-      const players = DATA.players;
       const leaders = (key, min) => {
-        const max = Math.max(...players.map(p => st[p][key]));
+        const max = Math.max(...PLAYERS.map(p => playerStats[p.uid][key]));
         if (min !== undefined && max < min) return null;
-        return { value: max, names: players.filter(p => st[p][key] === max) };
+        return { value: max, names: PLAYERS.filter(p => playerStats[p.uid][key] === max).map(p => p.name) };
       };
       const chips = (names, statKey, title, icon) => names.map(n => {
         const d = JSON.stringify({ player: n, statKey, title, icon }).replace(/"/g, '&quot;');
@@ -2485,11 +2507,11 @@
       el.innerHTML = `<div class="insights-grid">
         ${card('🔥', 'Longest run without a miss', streak.value + (streak.value === 1 ? ' match' : ' matches'), streak.names, null, 'streak')}
         ${card('🎯', 'Most exact scores', exact.value + (exact.value === 1 ? ' exact hit' : ' exact hits'), exact.names, null, 'exact')}
-        ${card('✅', 'Most correct results', outcomes.value + ' correct', outcomes.names, `out of ${playedCount} played`, 'outcomes')}
+        ${card('✅', 'Most correct results', outcomes.value + ' correct', outcomes.names, `out of ${generalStats.playedCount} played`, 'outcomes')}
         ${upsets ? card('🦁', 'Best upset caller', upsets.value + (upsets.value === 1 ? ' upset' : ' upsets'), upsets.names, 'right when the majority was wrong', 'upsets') : ''}
         ${hot ? card('⚡', 'On a run right now', hot.value + ' in a row', hot.names, 'active streak', 'currentStreak') : ''}
         ${lone ? card('🐺', 'Lone wolf', lone.value + (lone.value === 1 ? ' lone call' : ' lone calls'), lone.names, 'only one to call it right', 'loneWolf') : ''}
-        ${biggestRound && biggestRound.total > 0 ? card('📅', 'Biggest scoring round', biggestRound.total + ' pts', null, `${escapeHtml(biggestRound.key)} · everyone combined`) : ''}
+        ${generalStats.biggestRound && generalStats.biggestRound.total > 0 ? card('📅', 'Biggest scoring round', generalStats.biggestRound.total + ' pts', null, `${escapeHtml(generalStats.biggestRound.key)} · everyone combined`) : ''}
         ${perfect ? card('🌟', 'Perfect rounds', perfect.value + (perfect.value === 1 ? ' round' : ' rounds'), perfect.names, 'every result right in one round', 'perfectRounds') : ''}
         ${cold ? card('🧊', 'Cold streak', cold.value + ' wrong in a row', cold.names, 'still running', 'coldStreak') : ''}
         ${close ? card('😭', 'One goal short', close.value + (close.value === 1 ? ' near miss' : ' near misses'), close.names, 'one goal away from an exact score, 0 pts', 'closeCall') : ''}
@@ -2504,11 +2526,11 @@
               <div class="insight-card-cta">See the top 5 →</div>
             </div></div>`;
         })() : ''}
-        ${teamkills.length ? `<div class="insight-card clickable-card" onclick="openTeamkillModal()">
+        ${generalStats.teamkills.length ? `<div class="insight-card clickable-card" onclick="openTeamkillModal()">
           <div class="insight-icon">💀</div>
           <div class="insight-body">
             <div class="insight-title">Nobody got it</div>
-            <div class="insight-value">${teamkills.length} ${teamkills.length === 1 ? 'match' : 'matches'}</div>
+            <div class="insight-value">${generalStats.teamkills.length} ${generalStats.teamkills.length === 1 ? 'match' : 'matches'}</div>
             <div class="insight-sub">every prediction was wrong</div>
             <div class="insight-card-cta">See the games →</div>
           </div></div>` : ''}
@@ -2516,8 +2538,7 @@
     }
 
     function getStatMatches(playerId, statKey) {
-      const played = DATA.matches.filter(m => getMatchScore(m))
-        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+      const played = scoredMatches().sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0);
       const mine = played.filter(m => getPrediction(m, playerId));
       switch (statKey) {
         case 'exact': return mine.filter(m => getPointsOfPlayerPrediction(m, playerId) >= 3);
@@ -2575,7 +2596,8 @@
 
     function openPlayerStatModal(btn) {
       const { player, statKey, title, icon } = JSON.parse(btn.dataset.stat);
-      openStatModal({ icon, label: player, title, matches: getStatMatches(player.uid, statKey), player });
+      const uid = PLAYERS.filter(p => p.name === player)[0].uid;
+      openStatModal({ icon, label: player, title, matches: getStatMatches(uid, statKey), player });
     }
     function openTeamkillModal() {
       openStatModal({ icon: '💀', label: 'Nobody got it', title: 'Every prediction was wrong', matches: computeStats().teamkills, player: null });
@@ -2605,25 +2627,31 @@
       document.getElementById('stat-modal-icon').textContent = icon;
       document.getElementById('stat-modal-label').textContent = label;
       document.getElementById('stat-modal-title').textContent = title;
+      const uid = PLAYERS.filter(p => p.name === player)[0]['uid'];
       const listEl = document.getElementById('stat-modal-list');
       if (!matches.length) {
         listEl.innerHTML = '<div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:.85rem">Nothing to show yet.</div>';
       } else {
         listEl.innerHTML = matches.map(m => {
           let badge;
-          const pred = player ? getPrediction(m, player.uid) : null;
+          const pred = player ? getPrediction(m, uid) : null;
           if (pred) {
-            const pts = getPointsOfPlayerPrediction(m, player.uid);
+            const predScore = getMatchScore(pred);
+            const pts = getPointsOfPlayerPrediction(m, uid);
             const cls = pts >= 3 ? 'exact' : pts >= 1 ? 'outcome' : 'wrong';
-            const lbl = pts >= 3 ? `⚡ ${pred} · +3` : pts >= 1 ? `✓ ${pred} · +1` : `✗ ${pred} · 0`;
+            const lbl = pts >= 3 ? `⚡ ${predScore} · +3` : pts >= 1 ? `✓ ${predScore} · +1` : `✗ ${predScore} · 0`;
             badge = `<span class="stat-match-pred-badge ${cls}">${escapeHtml(lbl)}</span>`;
           } else {
             badge = `<span class="stat-match-pred-badge na">💀 0 pts each</span>`;
           }
           return `<div class="stat-match-item" onclick="goToMatch('${js(m.id)}')">
-            <span class="stat-match-home">${escapeHtml(m.home)}</span>
+            <div class="stat-match-team stat-match-home">
+              ${clubBadge(m.home_id)}<span class="stat-match-name">${escapeHtml(TEAMS[m.home_id].name)}</span>
+            </div>
             <div class="stat-match-score-col"><span class="stat-match-score">${escapeHtml(getMatchScore(m))}</span></div>
-            <span class="stat-match-away">${escapeHtml(m.away)}</span>
+            <div class="stat-match-team stat-match-away">
+              ${clubBadge(m.away_id)}<span class="stat-match-name">${escapeHtml(TEAMS[m.away_id].name)}</span>
+            </div>
             <div class="stat-match-meta">
               <span class="stat-match-date">${m.date ? fmtShort(m.date) : ''} · ${escapeHtml(m.stage === 'league' ? 'MD' + m.matchday : (ROUND_SHORT[m.round] || m.round))}</span>
               ${badge}
@@ -2725,7 +2753,7 @@
 
       // All matches grouped by round / matchday
       const groups = {};
-      DATA.matches.slice().sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
+      scoredMatches().sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0)
         .forEach(m => {
           const key = m.stage === 'league' ? `Matchday ${m.matchday}` : `${m.round}${m.path ? ' · ' + m.path : ''}`;
           (groups[key] = groups[key] || []).push(m);
@@ -2734,12 +2762,13 @@
       const body = Object.entries(groups).map(([key, list]) => {
         const rows = list.map(m => {
           const pred = getPrediction(m, player.uid);
+          const predScore = getMatchScore(pred);
           const actual = getMatchScore(m);
           const pts = calculatePredictionScore(pred, actual);
           return `<div class="pp-match" onclick="closeProfile();goToMatch('${js(m.id)}')" style="cursor:pointer">
-            <span class="pp-teams">${escapeHtml(m.home)}<span class="pp-vs"> v </span>${escapeHtml(m.away)}</span>
+            <span class="pp-teams">${escapeHtml(TEAMS[m.home_id].name)}<span class="pp-vs"> v </span>${escapeHtml(TEAMS[m.away_id].name)}</span>
             <div class="pp-right">
-              <span class="pp-pred ${pred ? ptsCls(pts) : 'none'}">${pred ? escapeHtml(pred) : '—'}</span>
+              <span class="pp-pred ${pred ? ptsCls(pts) : 'none'}">${pred ? escapeHtml(predScore) : '—'}</span>
               <span class="pp-actual">${actual ? escapeHtml(actual) : '—'}</span>
               <span class="pp-pts ${pts !== null ? ptsCls(pts) : ''}">${pts !== null ? (pts > 0 ? '+' : '') + pts : ''}</span>
             </div></div>`;
