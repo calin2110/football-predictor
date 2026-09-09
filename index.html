@@ -1004,7 +1004,7 @@
       <div class="header-inner">
         <h1>&#9917; Champions League <em>2026/27</em> &#8212; Predictions</h1>
         <div class="header-sub">Qualifying &middot; League phase &middot; Knockout</div>
-        <div class="profile-chip" onclick="openProfile()">
+        <div class="profile-chip" onclick="openProfile(CURRENT_USER?.playerName)">
           <span class="profile-avatar-initials" id="profile-avatar"></span>
           <span class="profile-player-name" id="profile-player-name"></span>
         </div>
@@ -1378,7 +1378,7 @@
       const predAwayGoals = pred.away_goals;
       const actualHomeGoals = match.home_goals;
       const actualAwayGoals = match.away_goals;
-      if (!actualHomeGoals || actualHomeGoals === '' || !actualAwayGoals || actualAwayGoals === '') return null;
+      if (actualHomeGoals == null || actualAwayGoals == null) return null;
       if (predHomeGoals === actualHomeGoals && predAwayGoals === actualAwayGoals) return Points.EXACT;
       if (predHomeGoals > predAwayGoals && actualHomeGoals > actualAwayGoals) return Points.PARTIAL;
       if (predHomeGoals === predAwayGoals && actualHomeGoals === actualAwayGoals) return Points.PARTIAL;
@@ -2254,7 +2254,7 @@
           <div class="stat-lbl">Most exact scores</div>
         </div>
         <div class="stat-card">
-          <div class="stat-val" style="font-size:1rem;font-weight:800;color:var(--text)">${leader ? escapeHtml(leader.player.playerName) : '—'}</div>
+          <div class="stat-val" style="font-size:1rem;font-weight:800;color:var(--text)">${leader ? escapeHtml(leader.player.name) : '—'}</div>
           <div class="stat-lbl">Top of the table</div>
         </div>`;
     }
@@ -2274,7 +2274,7 @@
         const rankCell = medals[rank] ? `<span class="rank-medal">${medals[rank]}</span>` : `<span class="rank-num">${rank}</span>`;
         return `<tr class="${rank <= 3 ? 'pos-' + rank : ''}${isMe ? ' is-me' : ''}">
           <td class="col-rank">${rankCell}</td>
-          <td class="col-player"><span class="player-link" onclick="openProfile('${js(e.player.uid)}')">${escapeHtml(e.player.name)}</span>${isMe ? '<span class="lb-you">you</span>' : ''}</td>
+          <td class="col-player"><span class="player-link" onclick="openProfile('${js(e.player.name)}')">${escapeHtml(e.player.name)}</span>${isMe ? '<span class="lb-you">you</span>' : ''}</td>
           <td class="val-pts">${e.points}</td>
           <td class="col-gp">${e.playedCount}</td>
           <td class="val-exact">${e.exactCount}</td>
@@ -2287,10 +2287,13 @@
     }
 
     function getLeaderboardDates() {
-      const leagueDates = new Set(LEAGUE_MATCHES.map(m => splitDateTime(m).date));
-      const knockoutDates = new Set(KNOCKOUT_MATCHES.map(m => splitDateTime(m).date));
-      return new Set([...leagueDates, ...knockoutDates]);
+      const allDates = new Set([
+        ...LEAGUE_MATCHES.map(m => splitDateTime(m.datetime).date),
+        ...KNOCKOUT_MATCHES.map(m => splitDateTime(m.datetime).date)
+      ]);
+      return Array.from(allDates).sort();
     }
+
     function _liveIdx(dates) {
       const scored = DATA.matches.filter(m => getMatchScore(m) && m.date).map(m => m.date).sort();
       const last = scored[scored.length - 1];
@@ -2634,17 +2637,14 @@
     // ══════════════════════════════════════════════════
     //  PROFILE PANEL
     // ══════════════════════════════════════════════════
-    function openProfile(player) { renderProfile(player || CURRENT_USER?.playerName); document.getElementById('profile-overlay').classList.add('open'); document.body.style.overflow = 'hidden'; }
+    function openProfile(playerName) {
+      const player = PLAYERS.filter(p => p.name === playerName)[0];
+      renderProfile(player || CURRENT_USER);
+      document.getElementById('profile-overlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
     function closeProfile() { document.getElementById('profile-overlay').classList.remove('open'); document.body.style.overflow = ''; }
     function closeProfileOnBackdrop(e) { if (e.target === document.getElementById('profile-overlay')) closeProfile(); }
-
-    function switchPlayer() {
-      const val = document.getElementById('pp-switch-input').value.trim().toUpperCase();
-      if (!val) return;
-      const url = new URL(location.href);
-      url.searchParams.set('player', val);
-      location.href = url.toString();
-    }
 
     function buildProfileNeighbors(player) {
       const lb = computeLeaderboardPoints();
@@ -2654,39 +2654,30 @@
       const row = (e, rank, isMe, diff, dir) => `
         <div class="pp-nbr-row${isMe ? ' pp-nbr-me' : ''}">
           <span class="pp-nbr-rank">#${rank}</span>
-          <span class="pp-nbr-name">${escapeHtml(e.player)}${e.player === CURRENT_USER?.playerName ? ' <span class="pp-nbr-you">(you)</span>' : ''}</span>
-          <span class="pp-nbr-pts">${e.pts}</span>
+          <span class="pp-nbr-name">${escapeHtml(e.player.name)}${e.player.uid === CURRENT_USER?.uid ? ' <span class="pp-nbr-you">(you)</span>' : ''}</span>
+          <span class="pp-nbr-pts">${e.points}</span>
           ${diff !== null ? `<span class="pp-nbr-diff ${dir}">${dir === 'behind' ? '+' : '-'}${diff} pts</span>` : ''}
         </div>`;
       return `<div class="pp-neighbors">
         <div class="pp-section-label">Leaderboard</div>
-        ${above ? row(above, idx, false, above.pts - mine.pts, 'behind') : '<div class="pp-nbr-leader">🏆 Top of the table</div>'}
+        ${above ? row(above, idx, false, above.points - mine.points, 'behind') : '<div class="pp-nbr-leader">🏆 Top of the table</div>'}
         ${row(mine, idx + 1, true, null, null)}
-        ${below ? row(below, idx + 2, false, mine.pts - below.pts, 'ahead') : '<div class="pp-nbr-last">Bottom of the pile 💀</div>'}
+        ${below ? row(below, idx + 2, false, mine.points - below.points, 'ahead') : '<div class="pp-nbr-last">Bottom of the pile 💀</div>'}
       </div>`;
     }
 
     function renderProfile(player) {
       if (!player) return;
-      const isMe = player === CURRENT_USER?.playerName;
+      const isMe = player.uid === CURRENT_USER?.uid;
       document.getElementById('pp-header').innerHTML = `
-        <div class="pp-avatar-initials" style="background:${teamColor(player)}">${escapeHtml(player[0] || '?')}</div>
+        <div class="pp-avatar-initials" style="background:${teamColor(player)}">${escapeHtml(player.name[0] || '?')}</div>
         <div class="pp-identity">
-          <div class="pp-name">${escapeHtml(player)}</div>
+          <div class="pp-name">${escapeHtml(player.name)}</div>
           ${isMe ? '<div class="pp-name-sub">This is you</div>' : '<div class="pp-name-sub">Viewing profile</div>'}
         </div>
         <button class="pp-close" onclick="closeProfile()">&#10005;</button>`;
 
-      document.getElementById('pp-footer').innerHTML = `
-        <div class="pp-section-label">Play as someone else</div>
-        <div class="pp-switch-row">
-          <input class="pp-switch-input" id="pp-switch-input" placeholder="Name" value="${escapeHtml(CURRENT_USER?.playerName || '')}">
-          <button class="pp-switch-btn" onclick="switchPlayer()">Switch</button>
-        </div>
-        <div style="font-size:.66rem;color:var(--text3);margin-top:6px">Sign-in is off for now — your name comes from <code>?player=</code> in the URL.</div>`;
-
-      const played = DATA.matches.filter(predictable).filter(m => getMatchScore(m))
-        .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+      const played = scoredMatches().sort((a, b) => a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0);
       let exact = 0, correct = 0, cur = 0, best = 0;
       played.forEach(m => {
         const pts = getPointsOfPlayerPrediction(m, player.uid);
@@ -2694,12 +2685,12 @@
         if (pts >= 3) exact++;
         if (pts >= 1) { correct++; cur++; if (cur > best) best = cur; } else cur = 0;
       });
-      const lb = computeLeaderboardPoints();
-      const entry = lb.find(x => x.player === player);
-      const rank = lb.findIndex(x => x.player === player) + 1;
+      const leaderboardPts = computeLeaderboardPoints();
+      const entry = leaderboardPts.find(x => x.player === player);
+      const rank = leaderboardPts.findIndex(x => x.player === player) + 1;
       const statsHtml = `<div class="pp-stats">
         <div class="pp-stat"><span class="pp-stat-val">#${rank || '—'}</span><span class="pp-stat-lbl">Rank</span></div>
-        <div class="pp-stat"><span class="pp-stat-val">${entry?.pts ?? 0}</span><span class="pp-stat-lbl">Points</span></div>
+        <div class="pp-stat"><span class="pp-stat-val">${entry?.points ?? 0}</span><span class="pp-stat-lbl">Points</span></div>
         <div class="pp-stat"><span class="pp-stat-val">${exact}</span><span class="pp-stat-lbl">Exact</span></div>
         <div class="pp-stat"><span class="pp-stat-val">${correct}</span><span class="pp-stat-lbl">Correct</span></div>
         <div class="pp-stat"><span class="pp-stat-val">${best}</span><span class="pp-stat-lbl">Best run</span></div>
@@ -2710,13 +2701,13 @@
       played.forEach(m => {
         const pts = getPointsOfPlayerPrediction(m, player.uid);
         if (!pts) return;
-        teamPts[m.home] = (teamPts[m.home] || 0) + pts;
-        teamPts[m.away] = (teamPts[m.away] || 0) + pts;
+        teamPts[m.home_id] = (teamPts[m.home_id] || 0) + pts;
+        teamPts[m.away_id] = (teamPts[m.away_id] || 0) + pts;
       });
-      const lucky = Object.entries(teamPts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      const lucky = Object.entries(teamPts).sort((a, b) => b[1] - a[1] || TEAMS[a[0]].name.localeCompare(TEAMS[b[0]].name))[0];
       const luckyHtml = lucky
         ? `<div class="pp-lucky">${clubBadge(lucky[0])}<span class="pp-lucky-lbl">⭐ Lucky club</span>
-             <span class="pp-lucky-team">${escapeHtml(lucky[0])}</span><span class="pp-lucky-pts">${lucky[1]} pts</span></div>`
+             <span class="pp-lucky-team">${escapeHtml(TEAMS[lucky[0]].name)}</span><span class="pp-lucky-pts">${lucky[1]} pts</span></div>`
         : '';
 
       // All matches grouped by round / matchday
