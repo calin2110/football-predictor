@@ -559,6 +559,17 @@
     .insight-body { flex: 1; min-width: 0; }
     .insight-title { font-size: .68rem; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
     .insight-value { font-size: 1.4rem; font-weight: 800; color: var(--text); line-height: 1.15; margin-bottom: 6px; }
+    .insight-value-match {
+      display: flex; align-items: center; gap: 6px;
+      flex-wrap: nowrap; font-size: 1.05rem;
+      min-width: 0;
+    }
+    .insight-team-name {
+      min-width: 0; flex: 0 1 auto;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .insight-vs { color: var(--text3); font-weight: 400; font-size: .85rem; flex-shrink: 0; }
+    .insight-card .club-crest, .insight-card .club-badge { width: 18px; height: 18px; flex-shrink: 0; }
     .insight-names { display: flex; flex-wrap: wrap; gap: 4px; }
     .insight-name-btn {
       background: var(--accent); color: #001; border: none; border-radius: 999px;
@@ -2534,7 +2545,11 @@
             <div class="insight-icon">⚖️</div>
             <div class="insight-body">
               <div class="insight-title">Most divided predictions</div>
-              <div class="insight-value" style="font-size:1.05rem">${escapeHtml(g.m.home)} vs ${escapeHtml(g.m.away)}</div>
+              <div class="insight-value insight-value-match">
+                ${clubBadge(g.m.home_id)}<span class="insight-team-name">${escapeHtml(TEAMS[g.m.home_id].name)}</span>
+                <span class="insight-vs">vs</span>
+                ${clubBadge(g.m.away_id)}<span class="insight-team-name">${escapeHtml(TEAMS[g.m.away_id].name)}</span>
+              </div>
               ${bar}${labels}
               <div class="insight-card-cta">See the top 5 →</div>
             </div></div>`;
