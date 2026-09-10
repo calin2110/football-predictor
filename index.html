@@ -1998,14 +1998,17 @@
       }
     }
 
-    // TODO: fix.
-    function goToMatch(id) {
+    function goToMatch(id, stage) {
       closeStatModal();
-      const match = matchById(id);
+      if (stage === Stage.LEAGUE)
+        match = LEAGUE_MATCHES[id];
+      else if (stage === Stage.QUALIFYING)
+        match = QUALIFYING_MATCHES[id];
+      else match = KNOCKOUT_MATCHES[id];
       if (!match) return;
       showTab('matches');
       setStage(match.stage);
-      setFilter(match.stage === 'league' ? String(match.matchday) : match.round);
+      setFilter(match.stage === Stage.LEAGUE ? String(match.matchday) : match.round);
       setTimeout(() => {
         const el = document.querySelector(`.match-card[data-id="${CSS.escape(match.id)}"]`);
         if (el) {
@@ -2617,10 +2620,8 @@
         });
         case 'closeCall': return mine.filter(m => {
           const pred = getPrediction(m, playerId);
-          if (getPointsOfPlayerPrediction(m, playerId) !== 0 || !pred.includes('-')) return false;
-          const [ph, pa] = pred.split('-').map(Number);
-          const [ah, aa] = getMatchScore(m).split('-').map(Number);
-          return Math.abs(ph - ah) + Math.abs(pa - aa) === 1;
+          if (getPointsOfPlayerPrediction(m, playerId) !== 0) return false;
+          return Math.abs(pred.home_goals - m.home_goals) + Math.abs(pred.away_goals - m.away_goals) === 1;
         });
         case 'perfectRounds': {
           const groups = {};
@@ -2656,7 +2657,7 @@
       document.getElementById('stat-modal-list').innerHTML = top5.map((g, i) => {
         const { bar, labels } = splitBar(g.counts);
         const sc = getMatchScore(g.m);
-        return `<div class="stat-match-item" onclick="goToMatch('${js(g.m.id)}')">
+        return `<div class="stat-match-item" onclick="goToMatch('${js(g.m.id)}', '${js(g.m.stage)}')">
           <div class="stat-match-team side-home">
             ${clubBadge(g.m.home_id)}<span class="stat-match-name">${escapeHtml(TEAMS[g.m.home_id].name)}</span>
           </div>
@@ -2694,7 +2695,7 @@
           } else {
             badge = `<span class="stat-match-pred-badge na">💀 0 pts each</span>`;
           }
-          return `<div class="stat-match-item" onclick="goToMatch('${js(m.id)}')">
+          return `<div class="stat-match-item" onclick="goToMatch('${js(m.id)}', '${js(m.stage)}')">
             <div class="stat-match-team stat-match-home">
               ${clubBadge(m.home_id)}<span class="stat-match-name">${escapeHtml(TEAMS[m.home_id].name)}</span>
             </div>
@@ -2815,7 +2816,7 @@
           const predScore = getMatchScore(pred);
           const actual = getMatchScore(m);
           const pts = calculatePredictionScore(pred, actual);
-          return `<div class="pp-match" onclick="closeProfile();goToMatch('${js(m.id)}')" style="cursor:pointer">
+          return `<div class="pp-match" onclick="closeProfile();goToMatch('${js(m.id)}', '${js(m.stage)}')" style="cursor:pointer">
             <span class="pp-teams">${escapeHtml(TEAMS[m.home_id].name)}<span class="pp-vs"> v </span>${escapeHtml(TEAMS[m.away_id].name)}</span>
             <div class="pp-right">
               <span class="pp-pred ${pred ? ptsCls(pts) : 'none'}">${pred ? escapeHtml(predScore) : '—'}</span>
