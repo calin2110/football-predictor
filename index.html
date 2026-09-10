@@ -2469,7 +2469,6 @@
       return {'playerStats': playerStats, 'generalStats': generalStats}
     }
 
-    // TODO
     function getTop5ByEntropy() {
       return scoredMatches().map(m => {
         const preds = PLAYERS.map(p => getPrediction(m, p.uid)).filter(Boolean);
@@ -2589,12 +2588,28 @@
           return out;
         }
         case 'upsets': return mine.filter(m => {
-          // TODO: this breaks
+
+          let outcome = m => {
+            if (m.home_goals > m.away_goals)
+              return 'H';
+            if (m.home_goals === m.away_goals)
+              return 'D';
+            else
+              return 'A';
+          }
           if (getPointsOfPlayerPrediction(m, playerId) < 1) return false;
           const counts = { H: 0, D: 0, A: 0 }; let total = 0;
-          DATA.players.forEach(p => { const o = predOutcome(m, p.uid); if (o) { counts[o]++; total++; } });
+          PLAYERS.forEach(p => {
+            const pred = getPrediction(m, p.uid);
+            let o = outcome(pred);
+            if (!pred)
+              return;
+
+             counts[o]++;
+             total++;
+          });
           const major = ['H', 'D', 'A'].reduce((a, b) => counts[a] >= counts[b] ? a : b);
-          return total > 0 && major !== outcome(getMatchScore(m));
+          return total > 0 && major !== outcome(m);
         });
         case 'loneWolf': return mine.filter(m => {
           if (getPointsOfPlayerPrediction(m, playerId) < 1) return false;
