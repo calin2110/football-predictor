@@ -2237,6 +2237,7 @@
       const leaderboard = PLAYERS.map(player => {
         let points = 0, exactCount = 0, outcomeCount = 0, wrongCount = 0, playedCount = 0;
         scoredMatches().forEach(m => {
+          if (LB_DATE && splitDateTime(m.datetime).date > LB_DATE) return;
           const predPts = getPointsOfPlayerPrediction(m, player.uid);
           if (predPts === null) return;
           playedCount++;
