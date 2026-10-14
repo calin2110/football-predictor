@@ -1407,6 +1407,8 @@
       return PREDS[match.stage]['matches'][match.id]?.[playerId] || null;
     }
     function getPointsOfPlayerPrediction(match, playerId) {
+      if (getPrediction(match, playerId) === null)
+        return 0;
       return calculatePredictionScore(getPrediction(match, playerId), match);
     }
     function ptsCls(pts) {
