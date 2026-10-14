@@ -2438,6 +2438,8 @@
       played.forEach(m => {
         const counts = { H: 0, D: 0, A: 0 }; let total = 0;
         const getOutcome = m => {
+          if (m == null)
+            return null;
           if (m.home_goals == null || m.away_goals == null)
             return null;
           if (m.home_goals > m.away_goals)
