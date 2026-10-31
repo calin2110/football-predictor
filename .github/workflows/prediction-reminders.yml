@@ -1,0 +1,53 @@
+# Triggered by cron-job.org every 10-15 minutes through the GitHub API (workflow_dispatch),
+# or by hand from the Actions tab.
+name: Prediction reminders
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run = print only, test = send everything to TEST_EMAIL, prod = send to players'
+        type: choice
+        options: [dry-run, test, prod]
+        default: dry-run
+      now:
+        description: 'Optional: pretend it is this time (e.g. 2026-11-23T18:00:00Z) to test a reminder'
+        required: false
+        default: ''
+      only_player:
+        description: 'Optional: only handle this player (name as on the site), e.g. for testing'
+        required: false
+        default: ''
+
+# Never run two at once, so nobody gets a duplicate email
+concurrency:
+  group: prediction-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: notifier
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: notifier/package-lock.json
+      - run: npm ci
+      - run: node notify.js
+        env:
+          MODE: ${{ inputs.mode }}
+          NOW: ${{ inputs.now }}
+          ONLY_PLAYER: ${{ inputs.only_player }}
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
