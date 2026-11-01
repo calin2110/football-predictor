@@ -2,7 +2,7 @@ Subject: Predictii UCL
 
 Baaaa pulaaa,
 
-{round} incepe intr-o ora ({start}) si tu esti o putoare ordinara si INCA nu ai bagat predictiile aici:
+Urmatorul meci din {round} incepe intr-o ora ({start}) si tu esti o putoare ordinara si INCA nu ai bagat predictiile aici:
 
 {matches}
 

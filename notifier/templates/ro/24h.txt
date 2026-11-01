@@ -2,7 +2,7 @@ Subject: Predictii UCL
 
 Ma tigane,
 
-{round} incepe maine ({start}) si tu esti o putoare ordinara si nu ai bagat predictiile aici:
+Urmatorul meci din {round} incepe maine ({start}) si tu esti o putoare ordinara si nu ai bagat predictiile aici:
 
 {matches}
 

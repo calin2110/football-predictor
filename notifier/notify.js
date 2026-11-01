@@ -1,4 +1,4 @@
-// Sends "you haven't predicted yet" emails 24h and 1h before the first match of each matchday / round.
+// Sends "you haven't predicted yet" emails 24h and 1h before each player's earliest game without a prediction.
 // Meant to be run every ~10-15 minutes (cron-job.org → GitHub Actions). Safe to run as often as you like:
 // every email that goes out is recorded in Firebase, so nobody gets the same reminder twice.
 //
@@ -20,7 +20,7 @@ import { initializeApp, cert, deleteApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import { getAuth } from 'firebase-admin/auth';
 import nodemailer from 'nodemailer';
-import { buildRounds, dueReminder, playersMissingPredictions, buildEmail, formatKickoff, LANGUAGES } from './reminders.js';
+import { buildRounds, planReminders, buildEmail, formatKickoff, LANGUAGES } from './reminders.js';
 
 const readLocal = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 // TEMPLATES.ro['24h'], TEMPLATES.en['1h'], ...
@@ -124,39 +124,37 @@ async function main() {
   console.log(`Players: ${players.map(p => `${p.name} (${langOf(p)})`).join(', ')}`);
   console.log(`Next rounds: ${upcoming.map(r => `${r.label} (${formatKickoff(r.firstKickoff, DISPLAY_TZ)})`).join(', ') || 'none'}`);
 
+  // One reminder per player, based on their own earliest game without a prediction.
+  // Recorded per kick-off time, so each game time triggers at most one 24h and one 1h email per player.
+  const sentPathOf = plan => `${SENT_ROOT}/${new Date(plan.kickoff).toISOString().slice(0, 16).replace(':', '-')}/${plan.reminder}/${plan.player.uid}`;
+  const plans = [];
+  for (const plan of planReminders(rounds, players, predictions, now)) {
+    if (!simulated && (await read(sentPathOf(plan)))) continue;
+    plans.push(plan);
+  }
+  console.log(`\nReminders due now: ${plans.length}`);
+
   let sent = 0, failed = 0;
-  for (const round of rounds) {
-    const reminder = dueReminder(round, now);
-    if (!reminder) continue;
+  const emails = plans.length ? await emailsByUid(plans.map(p => p.player.uid)) : {};
+  for (const plan of plans) {
+    const { player, round, reminder } = plan;
+    const realEmail = emails[player.uid];
+    const to = MODE === 'test' ? TEST_EMAIL : realEmail;
+    const lang = langOf(player);
+    const msg = buildEmail({ player, round, reminder, lang, template: TEMPLATES[lang][reminder], siteUrl: SITE_URL, timeZone: DISPLAY_TZ });
+    const subject = MODE === 'prod' ? msg.subject : `[TEST → ${player.name}] ${msg.subject}`;
+    console.log(`  • ${player.name} <${realEmail ?? 'no email!'}> [${lang}]: ${reminder} reminder for ${formatKickoff(plan.kickoff, DISPLAY_TZ)} · ${round.label} · missing ${player.missing.length}`);
 
-    const sentPath = `${SENT_ROOT}/${round.id}/${reminder}`;
-    const alreadySent = simulated ? {} : (await read(sentPath)) || {};
-    const todo = playersMissingPredictions(round, players, predictions?.[round.stage], now)
-      .filter(p => !alreadySent[p.uid]);
-
-    console.log(`\n${round.label} — ${reminder} reminder: ${todo.length} player(s) to remind`);
-    if (!todo.length) continue;
-
-    const emails = await emailsByUid(todo.map(p => p.uid));
-    for (const player of todo) {
-      const realEmail = emails[player.uid];
-      const to = MODE === 'test' ? TEST_EMAIL : realEmail;
-      const lang = langOf(player);
-      const msg = buildEmail({ player, round, reminder, lang, template: TEMPLATES[lang][reminder], siteUrl: SITE_URL, timeZone: DISPLAY_TZ });
-      const subject = MODE === 'prod' ? msg.subject : `[TEST → ${player.name}] ${msg.subject}`;
-      console.log(`  • ${player.name} <${realEmail ?? 'no email!'}> [${lang}]: missing ${player.missing.length}`);
-
-      if (MODE === 'dry-run') continue;
-      if (!to) { console.warn('    ! skipped: no email address on this account'); failed++; continue; }
-      try {
-        await mailer.sendMail({ from: `"UCL Predictions" <${process.env.GMAIL_USER}>`, to, subject, text: msg.text, html: msg.html });
-        sent++;
-        console.log(`    ✓ sent to ${to}`);
-        if (recordSends) await ref(`${sentPath}/${player.uid}`).set(Date.now());
-      } catch (e) {
-        failed++;
-        console.error(`    ✖ failed: ${e.message}`);
-      }
+    if (MODE === 'dry-run') continue;
+    if (!to) { console.warn('    ! skipped: no email address on this account'); failed++; continue; }
+    try {
+      await mailer.sendMail({ from: `"UCL Predictions" <${process.env.GMAIL_USER}>`, to, subject, text: msg.text, html: msg.html });
+      sent++;
+      console.log(`    ✓ sent to ${to}`);
+      if (recordSends) await ref(sentPathOf(plan)).set(Date.now());
+    } catch (e) {
+      failed++;
+      console.error(`    ✖ failed: ${e.message}`);
     }
   }
 

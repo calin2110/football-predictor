@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { kickoffMs, buildRounds, dueReminder, playersMissingPredictions, buildEmail, HOUR, MINUTE } from './reminders.js';
+import { kickoffMs, buildRounds, dueReminder, playersMissingPredictions, planReminders, buildEmail, HOUR, MINUTE } from './reminders.js';
 
 const teams = { 1: { name: 'Arsenal' }, 2: { name: 'Celtic' }, 3: { name: 'FC Porto' }, 4: { name: 'AS Roma' } };
 const league = {
@@ -24,21 +24,59 @@ test('groups by matchday and knockout round + leg', () => {
   assert.equal(rounds[0].matches.length, 2);
 });
 
-test('due reminder windows', () => {
-  const r = { firstKickoff: md5Start };
-  assert.equal(dueReminder(r, md5Start - 25 * HOUR), null);
-  assert.equal(dueReminder(r, md5Start - 24 * HOUR), '24h');
-  assert.equal(dueReminder(r, md5Start - 2 * HOUR), '24h');
-  assert.equal(dueReminder(r, md5Start - 60 * MINUTE), '1h');
-  assert.equal(dueReminder(r, md5Start - 1 * MINUTE), '1h');
-  assert.equal(dueReminder(r, md5Start), null);
+test('due reminder windows: 24h (up to 2h late) and 1h', () => {
+  assert.equal(dueReminder(md5Start, md5Start - 25 * HOUR), null);
+  assert.equal(dueReminder(md5Start, md5Start - 24 * HOUR), '24h');
+  assert.equal(dueReminder(md5Start, md5Start - 23 * HOUR), '24h');
+  assert.equal(dueReminder(md5Start, md5Start - 22 * HOUR), null);   // too late for "tomorrow"
+  assert.equal(dueReminder(md5Start, md5Start - 5 * HOUR), null);
+  assert.equal(dueReminder(md5Start, md5Start - 60 * MINUTE), '1h');
+  assert.equal(dueReminder(md5Start, md5Start - 1 * MINUTE), '1h');
+  assert.equal(dueReminder(md5Start, md5Start), null);
 });
 
-test('round does not restart after its first match is played', () => {
-  const played = { ...league, 10: { ...league[10], home_goals: '2', away_goals: '1' } };
-  const [md5] = buildRounds({ league: played }, teams);
-  assert.equal(md5.firstKickoff, md5Start);
-  assert.equal(dueReminder(md5, md5Start + HOUR), null);
+// Matchday with games on Tuesday 18:45 + 21:00 and Wednesday 18:45 + 21:00 (CET)
+const md = {
+  1: { matchday: 4, datetime: '2026-11-03 18:45', home_id: 1, away_id: 2 },
+  2: { matchday: 4, datetime: '2026-11-03 21:00', home_id: 3, away_id: 4 },
+  3: { matchday: 4, datetime: '2026-11-04 18:45', home_id: 2, away_id: 3 },
+  4: { matchday: 4, datetime: '2026-11-04 21:00', home_id: 4, away_id: 1 },
+  5: { matchday: 5, datetime: '2026-11-24 18:45', home_id: 1, away_id: 3 },
+};
+const tue = kickoffMs('2026-11-03 18:45'), tueLate = kickoffMs('2026-11-03 21:00');
+const wed = kickoffMs('2026-11-04 18:45'), wedLate = kickoffMs('2026-11-04 21:00');
+const pred = { home_goals: 1, away_goals: 1 };
+const predsFor = (...ids) => ({ league: { matches: Object.fromEntries(ids.map(id => [id, { a: pred }])) } });
+const ana = [{ uid: 'a', name: 'Ana' }];
+const planAt = (preds, now) => planReminders(buildRounds({ league: md }, teams), ana, preds, now)
+  .map(p => [p.reminder, new Date(p.kickoff).toISOString(), p.player.missing.map(m => m.id)]);
+
+test('nothing predicted: Monday 24h reminder lists Tuesday and Wednesday games', () => {
+  assert.deepEqual(planAt({}, tue - 24 * HOUR), [['24h', new Date(tue).toISOString(), ['1', '2', '3', '4']]]);
+  assert.deepEqual(planAt({}, tue - HOUR), [['1h', new Date(tue).toISOString(), ['1', '2', '3', '4']]]);
+});
+
+test('Tuesday predicted: no Tuesday 1h reminder, but 24h and 1h before the first Wednesday game', () => {
+  const p = predsFor(1, 2);
+  assert.deepEqual(planAt(p, tue - HOUR), []);
+  assert.deepEqual(planAt(p, wed - 24 * HOUR), [['24h', new Date(wed).toISOString(), ['3', '4']]]);
+  assert.deepEqual(planAt(p, wed - HOUR), [['1h', new Date(wed).toISOString(), ['3', '4']]]);
+});
+
+test('only the late Wednesday game missing: reminders follow that game', () => {
+  const p = predsFor(1, 2, 3);
+  assert.deepEqual(planAt(p, wed - HOUR), []);
+  assert.deepEqual(planAt(p, wedLate - 24 * HOUR), [['24h', new Date(wedLate).toISOString(), ['4']]]);
+  assert.deepEqual(planAt(p, wedLate - HOUR), [['1h', new Date(wedLate).toISOString(), ['4']]]);
+});
+
+test('earliest missing game becomes the next one once a game has started', () => {
+  // Missed Tuesday 18:45 entirely; 1h before Tuesday 21:00 they get a reminder for the rest
+  assert.deepEqual(planAt({}, tueLate - HOUR), [['1h', new Date(tueLate).toISOString(), ['2', '3', '4']]]);
+});
+
+test('everything predicted: no reminders', () => {
+  assert.deepEqual(planAt(predsFor(1, 2, 3, 4, 5), tue - HOUR), []);
 });
 
 test('finds players missing at least one prediction', () => {

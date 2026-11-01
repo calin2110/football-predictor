@@ -3,10 +3,13 @@
 export const MINUTE = 60 * 1000;
 export const HOUR = 60 * MINUTE;
 
-// Ordered from latest to earliest; a round only ever gets the most urgent one that is due.
+// Reminders are relative to each player's earliest game without a prediction.
+// A reminder is due while the time left until that game is in (until, from].
+// The 24h one may go out up to 2h late (cron delays) but not later: someone who fills in some games and
+// still misses a game later the same day gets the 1h reminder for it, not a stale "starts tomorrow" one.
 export const REMINDERS = [
-  { key: '1h', before: 1 * HOUR },
-  { key: '24h', before: 24 * HOUR },
+  { key: '1h', from: 1 * HOUR, until: 0 },
+  { key: '24h', from: 24 * HOUR, until: 22 * HOUR },
 ];
 
 // Same rules as the website (index.html): match datetimes are stored in CET/CEST.
@@ -110,15 +113,14 @@ export function buildRounds(matchesByStage, teams) {
   return Object.values(rounds).sort((a, b) => a.firstKickoff - b.firstKickoff);
 }
 
-/** Which reminder ('1h' | '24h') is due for a round right now, or null. */
-export function dueReminder(round, now) {
-  const left = round.firstKickoff - now;
-  if (left <= 0) return null;
-  return REMINDERS.find(r => left <= r.before)?.key ?? null;
+/** Which reminder ('1h' | '24h') is due for a game kicking off at `kickoff`, or null. */
+export function dueReminder(kickoff, now) {
+  const left = kickoff - now;
+  return REMINDERS.find(r => left <= r.from && left > r.until)?.key ?? null;
 }
 
 /**
- * Players who are missing at least one prediction for a round, with the matches they're missing.
+ * Players who are missing at least one prediction for a round, with the matches they're missing (earliest first).
  * Only matches that are still open (not started, not played, both teams known) count.
  * @param {Array<{uid:string,name:string}>} players
  * @param {Object} predictions  predictions/<stage> as stored in Firebase: { matches: { matchId: { uid: {...} } } }
@@ -129,6 +131,31 @@ export function playersMissingPredictions(round, players, predictions, now) {
   return players
     .map(p => ({ ...p, missing: open.filter(m => !byMatch[m.id]?.[p.uid]) }))
     .filter(p => p.missing.length > 0);
+}
+
+/**
+ * Who needs a reminder right now. For each player, looks at their earliest game without a prediction
+ * (in any round); if that game is ~24h or ≤1h away, they get a reminder listing every game they're
+ * still missing in that game's round.
+ * @param {Object} predictionsByStage  the whole predictions/ node: { league: {...}, knockout: {...} }
+ * @returns {Array<{player, round, reminder: '24h'|'1h', kickoff: number}>}  player.missing = games to list
+ */
+export function planReminders(rounds, players, predictionsByStage, now) {
+  const plans = [];
+  for (const p of players) {
+    let earliest = null;
+    for (const round of rounds) {
+      const [missing] = playersMissingPredictions(round, [p], predictionsByStage?.[round.stage], now);
+      if (missing && (!earliest || missing.missing[0].kickoff < earliest.player.missing[0].kickoff)) {
+        earliest = { player: missing, round };
+      }
+    }
+    if (!earliest) continue;
+    const kickoff = earliest.player.missing[0].kickoff;
+    const reminder = dueReminder(kickoff, now);
+    if (reminder) plans.push({ ...earliest, reminder, kickoff });
+  }
+  return plans;
 }
 
 // timeZones: one or more IANA zones (array or comma-separated), e.g. "Europe/Paris,Europe/Bucharest"
@@ -164,7 +191,8 @@ export function buildEmail({ player, round, reminder, template, siteUrl, timeZon
   const vars = {
     name: player.name,
     round: roundName(round, lang),
-    start: formatKickoff(round.firstKickoff, timeZone, lang),
+    // kick-off of the earliest game they haven't predicted
+    start: formatKickoff(player.missing[0].kickoff, timeZone, lang),
     count: L.count(player.missing.length),
   };
   const matches = player.missing.map(m => L.match(m, formatKickoff(m.kickoff, timeZone, lang)));

@@ -2,7 +2,7 @@ Subject: UCL Predictions
 
 Whats up fucker,
 
-{round} starts tomorrow ({start}) and you, the lazy slob that you are, still haven't put in your predictions for:
+Your next {round} game kicks off tomorrow ({start}) and you, the lazy slob that you are, still haven't put in your predictions for:
 
 {matches}
 
