@@ -979,6 +979,54 @@
     .winner-summary-title { font-size:.9rem; font-weight:700; color:var(--text); margin-bottom:4px; }
     .winner-summary-sub { font-weight:400; color:var(--text2); margin-left:4px; }
 
+    /* ── "WHAT DID BLUD CHOOSE" ALERT ─────────────────── */
+    .blud-alert {
+      position: relative; overflow: hidden;
+      margin: 0 0 14px; padding: 14px 16px 16px;
+      border: 1.5px solid var(--red); border-radius: 14px;
+      background:
+        repeating-linear-gradient(-45deg, rgba(239,68,68,.07) 0 12px, transparent 12px 24px),
+        linear-gradient(160deg, rgba(239,68,68,.16), var(--card) 70%);
+      animation: blud-glow 1.6s ease-in-out infinite;
+      text-align: center;
+    }
+    @keyframes blud-glow {
+      0%, 100% { box-shadow: 0 0 10px rgba(239,68,68,.35), inset 0 0 12px rgba(239,68,68,.12); }
+      50%      { box-shadow: 0 0 26px rgba(239,68,68,.75), inset 0 0 20px rgba(239,68,68,.25); }
+    }
+    .blud-alert-head {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      font-size: 1.05rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase;
+      color: #fff; text-shadow: 0 0 10px rgba(239,68,68,.9);
+    }
+    .blud-siren { display: inline-block; animation: blud-siren .6s steps(2) infinite; }
+    @keyframes blud-siren { 50% { opacity: .25; } }
+    .blud-alert-sub { font-size: .72rem; color: var(--text2); margin-top: 2px; letter-spacing: .02em; }
+    .blud-pick {
+      display: inline-flex; align-items: center; gap: 10px;
+      margin: 12px auto 8px; padding: 8px 16px 8px 10px;
+      background: rgba(0,0,0,.35); border: 1px solid rgba(239,68,68,.45); border-radius: 999px;
+      animation: blud-shake 3.2s ease-in-out infinite;
+    }
+    .blud-pick .club-crest, .blud-pick .club-badge { width: 40px; height: 40px; font-size: .8rem; }
+    .blud-pick-name { font-size: 1.15rem; font-weight: 800; color: var(--text); }
+    @keyframes blud-shake {
+      0%, 88%, 100% { transform: rotate(0); }
+      90% { transform: rotate(-3deg); } 92% { transform: rotate(3deg); }
+      94% { transform: rotate(-2deg); } 96% { transform: rotate(2deg); }
+    }
+    .blud-caption { font-size: .85rem; color: var(--text); }
+    .blud-caption b { color: var(--red); }
+    .blud-emojis { font-size: 1.3rem; margin-top: 6px; letter-spacing: 2px; }
+    .pred-col.pred-col-blud { border-color: var(--red); box-shadow: 0 0 10px rgba(239,68,68,.5); }
+    @media (max-width: 420px) {
+      .blud-alert-head { font-size: .88rem; gap: 6px; letter-spacing: .02em; }
+      .blud-pick-name { font-size: 1rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .blud-alert, .blud-siren, .blud-pick { animation: none; }
+    }
+
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -1589,6 +1637,53 @@
       document.getElementById('match-modal').classList.remove('hidden');
     }
 
+    // The player whose champion pick gets the full alert treatment
+    const BLUD_PLAYER = 'Adrian';
+    const bludKey = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+
+    function renderBludAlert(preds) {
+      const blud = PLAYERS.find(p => bludKey(p.name) === bludKey(BLUD_PLAYER));
+      if (!blud) return '';
+      const team = TEAMS[preds?.[blud.uid]] || null;
+      const itsYou = blud.uid === CURRENT_USER?.uid;
+      const pickOne = list => list[Math.floor(Math.random() * list.length)];
+      const name = escapeHtml(blud.name);
+
+      const head = `<div class="blud-alert-head">
+          <span class="blud-siren">🚨</span><span>What did blud choose??</span><span class="blud-siren">🚨</span>
+        </div>
+        <div class="blud-alert-sub">${itsYou ? 'yes this is about you btw' : `breaking news · ${name}'s champion pick`}</div>`;
+
+      if (!team) {
+        return `<div class="blud-alert">${head}
+          <div class="blud-caption" style="margin-top:12px">${name} hasn't even picked yet. <b>blud is still thinking</b> 🤔</div>
+          <div class="blud-emojis">😭🙏💀</div>
+        </div>`;
+      }
+
+      const teamName = escapeHtml(team.name);
+      const isUnited = /manchester united|man\.? ?utd/i.test(team.name);
+      const caption = pickOne(isUnited ? [
+        `${name} looked at all 36 teams and picked <b>Man United</b> 😭`,
+        `<b>Man United</b> to win the Champions League. In this economy??`,
+        `${name} still thinks it's <b>2008</b>`,
+        `blud really trusts the project. the project does NOT trust blud`,
+        `<b>Man United</b> winning the UCL is crazy work`,
+        `it's the hope that kills you. <b>${name}</b> is already dead`,
+        `${name} said <b>Man United</b> with his whole chest`,
+      ] : [
+        `${name} looked at every team and really said <b>${teamName}</b>`,
+        `<b>${teamName}</b>?? blud is NOT serious`,
+        `${name} said <b>${teamName}</b> with his whole chest`,
+        `<b>${teamName}</b> winning the UCL is crazy work`,
+      ]);
+      return `<div class="blud-alert">${head}
+        <div class="blud-pick">${clubBadge(team.id)}<span class="blud-pick-name">${teamName}</span></div>
+        <div class="blud-caption">${caption}</div>
+        <div class="blud-emojis">${pickOne(['😭😭😭', '💀😭🙏', '😭🙏', '🥀💔😭', '😭💀'])}</div>
+      </div>`;
+    }
+
     async function renderWinnerBanner() {
      const el = document.getElementById('winner-banner');
      if (STAGE === Stage.QUALIFYING) {
@@ -1615,7 +1710,8 @@
      const cells = PLAYERS.map(p => {
         const pick = preds?.[p.uid] || null;
         const team = pick ? TEAMS[pick] : null;
-        const mine = p.uid === CURRENT_USER?.uid ? ' pred-col-mine' : '';
+        const mine = (p.uid === CURRENT_USER?.uid ? ' pred-col-mine' : '')
+          + (bludKey(p.name) === bludKey(BLUD_PLAYER) ? ' pred-col-blud' : '');
         const body = team
           ? `${clubBadge(team.id)}<span class="pred-col-score" style="font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${escapeHtml(team.name)}</span>`
           : `<span class="pred-col-score" style="color:var(--text3)">—</span>`;
@@ -1624,7 +1720,7 @@
         ${body}</div>`;
     }).join('');
 
-    el.innerHTML = `<div class="match-card winner-card">
+    el.innerHTML = `${renderBludAlert(preds)}<div class="match-card winner-card">
       <div class="card-top">
         <span class="tag-row"><span class="group-tag tag-ko">Champion</span></span>
       </div>
